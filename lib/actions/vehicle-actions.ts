@@ -6,20 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getVehicle } from "@/lib/data";
 import { canAccessLocation, canCreateVehicle, canEditVehicle, canManageDrivers, canTransferVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-
-function textValue(formData: FormData, key: string) {
-  const value = formData.get(key);
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function intValue(formData: FormData, key: string) {
-  const value = textValue(formData, key);
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
+import { driverSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -27,63 +14,62 @@ function today() {
 
 function requireAdminClient() {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) redirect("/login?error=server");
+  if (!supabase) throw new Error("Database connection failed");
   return supabase;
 }
 
 export async function createVehicleAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
-  if (!canCreateVehicle(profile)) redirect("/vehicles?error=permission");
+  if (!canCreateVehicle(profile)) throw new Error("Unauthorized: Permission denied");
+
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = vehicleSchema.safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    redirect(`/vehicles/new?error=${encodeURIComponent(error)}`);
+  }
+
+  const data = validated.data;
+  const divisionId = formData.get("division_id") as string;
+  const substationId = formData.get("substation_id") as string;
+
+  if (!canAccessLocation(profile, { circleId: data.circle_id, divisionId }, lookups)) {
+    throw new Error("Unauthorized: You don't have access to this location");
+  }
 
   const supabase = requireAdminClient();
-  const circleId = textValue(formData, "circle_id");
-  const divisionId = textValue(formData, "division_id");
-  const substationId = textValue(formData, "substation_id");
-  const registrationNo = textValue(formData, "registration_no");
-
-  if (!circleId || !registrationNo) redirect("/vehicles/new?error=missing-required");
-  if (!canAccessLocation(profile, { circleId, divisionId }, lookups)) redirect("/vehicles?error=permission");
-
   const { data: vehicle, error } = await supabase
     .from("vehicles")
     .insert({
-      registration_no: registrationNo.toUpperCase(),
-      vehicle_type: textValue(formData, "vehicle_type"),
-      fuel_type: textValue(formData, "fuel_type"),
-      model_year: intValue(formData, "model_year"),
-      owner_name: textValue(formData, "owner_name"),
-      owner_mobile: textValue(formData, "owner_mobile"),
-      vendor_name: textValue(formData, "vendor_name"),
-      gps_company: textValue(formData, "gps_company"),
-      gps_device_id: textValue(formData, "gps_device_id"),
-      circle_id: circleId,
-      insurance_expiry: textValue(formData, "insurance_expiry"),
-      fitness_expiry: textValue(formData, "fitness_expiry"),
-      pollution_expiry: textValue(formData, "pollution_expiry"),
-      status: textValue(formData, "status") ?? "active",
-      notes: textValue(formData, "notes"),
+      ...data,
+      registration_no: data.registration_no.toUpperCase(),
+      model_year: data.model_year || null,
+      insurance_expiry: data.insurance_expiry || null,
+      fitness_expiry: data.fitness_expiry || null,
+      pollution_expiry: data.pollution_expiry || null,
     })
     .select("id")
     .single();
 
-  if (error || !vehicle) redirect("/vehicles/new?error=create-failed");
+  if (error || !vehicle) throw new Error("Failed to create vehicle: " + error?.message);
 
   if (divisionId && substationId) {
     await supabase.from("vehicle_assignments").insert({
       vehicle_id: vehicle.id,
-      circle_id: circleId,
+      circle_id: data.circle_id,
       division_id: divisionId,
       substation_id: substationId,
-      assigned_from: textValue(formData, "assigned_from") ?? today(),
-      assigned_by: textValue(formData, "assigned_by") ?? profile.name,
+      assigned_from: (formData.get("assigned_from") as string) || today(),
+      assigned_by: (formData.get("assigned_by") as string) || profile.name,
       notes: "Created with vehicle master",
     });
 
     await supabase.from("vehicle_status_history").insert({
       vehicle_id: vehicle.id,
-      status: textValue(formData, "status") ?? "active",
-      from_date: textValue(formData, "assigned_from") ?? today(),
+      status: data.status,
+      from_date: (formData.get("assigned_from") as string) || today(),
       recorded_by: profile.name,
       remarks: "Vehicle created",
     });
@@ -97,33 +83,31 @@ export async function createVehicleAction(formData: FormData) {
 export async function updateVehicleAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
-  const supabase = requireAdminClient();
-  const vehicleId = textValue(formData, "vehicle_id");
-  if (!vehicleId) redirect("/vehicles?error=missing-vehicle");
+  const vehicleId = formData.get("vehicle_id") as string;
+  if (!vehicleId) throw new Error("Missing vehicle ID");
 
   const vehicle = await getVehicle(vehicleId, profile);
-  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) redirect("/vehicles?error=permission");
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
 
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = vehicleSchema.partial().safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    redirect(`/vehicles/${vehicleId}/edit?error=${encodeURIComponent(error)}`);
+  }
+
+  const data = validated.data;
+  const supabase = requireAdminClient();
   const { error } = await supabase
     .from("vehicles")
     .update({
-      registration_no: textValue(formData, "registration_no")?.toUpperCase() ?? vehicle.registration_no,
-      vehicle_type: textValue(formData, "vehicle_type"),
-      fuel_type: textValue(formData, "fuel_type"),
-      model_year: intValue(formData, "model_year"),
-      owner_name: textValue(formData, "owner_name"),
-      owner_mobile: textValue(formData, "owner_mobile"),
-      vendor_name: textValue(formData, "vendor_name"),
-      gps_company: textValue(formData, "gps_company"),
-      gps_device_id: textValue(formData, "gps_device_id"),
-      insurance_expiry: textValue(formData, "insurance_expiry"),
-      fitness_expiry: textValue(formData, "fitness_expiry"),
-      pollution_expiry: textValue(formData, "pollution_expiry"),
-      notes: textValue(formData, "notes"),
+      ...data,
+      registration_no: data.registration_no?.toUpperCase(),
     })
     .eq("id", vehicleId);
 
-  if (error) redirect(`/vehicles/${vehicleId}/edit?error=update-failed`);
+  if (error) throw new Error("Update failed: " + error.message);
 
   revalidatePath("/vehicles");
   revalidatePath(`/vehicles/${vehicleId}`);
@@ -133,108 +117,108 @@ export async function updateVehicleAction(formData: FormData) {
 export async function transferVehicleAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = transferSchema.safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    const vId = formData.get("vehicle_id");
+    redirect(`/vehicles/${vId}/transfer?error=${encodeURIComponent(error)}`);
+  }
+
+  const data = validated.data;
+  const vehicle = await getVehicle(data.vehicle_id, profile);
+  if (!vehicle) throw new Error("Vehicle not found or unauthorized");
+
+  if (!canTransferVehicle(profile, vehicle, data.to_circle_id, lookups)) {
+    throw new Error("Unauthorized: Transfer not allowed");
+  }
+  if (!canAccessLocation(profile, { circleId: data.to_circle_id, divisionId: data.to_division_id }, lookups)) {
+    throw new Error("Unauthorized: No access to destination");
+  }
+
   const supabase = requireAdminClient();
-  const vehicleId = textValue(formData, "vehicle_id");
-  if (!vehicleId) redirect("/vehicles?error=missing-vehicle");
-
-  const vehicle = await getVehicle(vehicleId, profile);
-  if (!vehicle) redirect("/vehicles?error=permission");
-
-  const toCircleId = textValue(formData, "to_circle_id");
-  const toDivisionId = textValue(formData, "to_division_id");
-  const toSubstationId = textValue(formData, "to_substation_id");
-  const transferDate = textValue(formData, "transfer_date");
-  const approvedBy = textValue(formData, "approved_by");
-
-  if (!toCircleId || !toDivisionId || !toSubstationId || !transferDate || !approvedBy) {
-    redirect(`/vehicles/${vehicleId}/transfer?error=missing-required`);
-  }
-
-  if (!canTransferVehicle(profile, vehicle, toCircleId, lookups)) {
-    redirect(`/vehicles/${vehicleId}/transfer?error=permission`);
-  }
-  if (!canAccessLocation(profile, { circleId: toCircleId, divisionId: toDivisionId }, lookups)) {
-    redirect(`/vehicles/${vehicleId}/transfer?error=destination-permission`);
-  }
-
   const { error } = await supabase.rpc("transfer_vehicle", {
-    p_vehicle_id: vehicleId,
-    p_to_circle_id: toCircleId,
-    p_to_division_id: toDivisionId,
-    p_to_substation_id: toSubstationId,
-    p_transfer_date: transferDate,
-    p_reason: textValue(formData, "reason") ?? "Administrative",
-    p_approved_by: approvedBy,
-    p_remarks: textValue(formData, "remarks"),
+    p_vehicle_id: data.vehicle_id,
+    p_to_circle_id: data.to_circle_id,
+    p_to_division_id: data.to_division_id,
+    p_to_substation_id: data.to_substation_id,
+    p_transfer_date: data.transfer_date,
+    p_reason: data.reason,
+    p_approved_by: data.approved_by,
+    p_remarks: data.remarks,
   });
 
-  if (error) redirect(`/vehicles/${vehicleId}/transfer?error=transfer-failed`);
+  if (error) throw new Error("Transfer failed: " + error.message);
 
   revalidatePath("/vehicles");
-  revalidatePath(`/vehicles/${vehicleId}`);
+  revalidatePath(`/vehicles/${data.vehicle_id}`);
   revalidatePath("/transfers");
   revalidatePath("/vehicle-history");
   revalidatePath("/dashboard");
-  redirect(`/vehicles/${vehicleId}?transferred=1`);
+  redirect(`/vehicles/${data.vehicle_id}?transferred=1`);
 }
 
 export async function changeVehicleStatusAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = statusSchema.safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    redirect(`/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(error)}`);
+  }
+
+  const data = validated.data;
+  const vehicle = await getVehicle(data.vehicle_id, profile);
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
+
   const supabase = requireAdminClient();
-  const vehicleId = textValue(formData, "vehicle_id");
-  if (!vehicleId) redirect("/vehicles?error=missing-vehicle");
-
-  const vehicle = await getVehicle(vehicleId, profile);
-  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) redirect("/vehicles?error=permission");
-
-  const status = textValue(formData, "status");
-  if (!status) redirect(`/vehicles/${vehicleId}?error=missing-status`);
-
   const { error } = await supabase.rpc("change_vehicle_status", {
-    p_vehicle_id: vehicleId,
-    p_status: status,
-    p_from_date: textValue(formData, "from_date") ?? today(),
+    p_vehicle_id: data.vehicle_id,
+    p_status: data.status,
+    p_from_date: data.from_date,
     p_recorded_by: profile.name,
-    p_remarks: textValue(formData, "remarks"),
+    p_remarks: data.remarks,
   });
 
-  if (error) redirect(`/vehicles/${vehicleId}?error=status-failed`);
+  if (error) throw new Error("Status update failed: " + error.message);
 
   revalidatePath("/vehicles");
-  revalidatePath(`/vehicles/${vehicleId}`);
+  revalidatePath(`/vehicles/${data.vehicle_id}`);
   revalidatePath("/vehicle-history");
   revalidatePath("/dashboard");
-  redirect(`/vehicles/${vehicleId}?status=1`);
+  redirect(`/vehicles/${data.vehicle_id}?status=1`);
 }
 
 export async function replaceDriverAssignmentAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
-  const supabase = requireAdminClient();
-  const vehicleId = textValue(formData, "vehicle_id");
-  const driverId = textValue(formData, "driver_id");
-  const shift = textValue(formData, "shift");
+  const vehicleId = formData.get("vehicle_id") as string;
+  const driverId = formData.get("driver_id") as string;
+  const shift = formData.get("shift") as string;
 
-  if (!vehicleId || !driverId || !shift) redirect("/vehicles?error=missing-driver-assignment");
+  if (!vehicleId || !driverId || !shift) throw new Error("Missing assignment data");
 
   const vehicle = await getVehicle(vehicleId, profile);
-  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) redirect("/vehicles?error=permission");
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
 
+  const supabase = requireAdminClient();
   const { data: driver } = await supabase.from("drivers").select("id,circle_id").eq("id", driverId).maybeSingle();
   if (!driver || !canAccessLocation(profile, { circleId: driver.circle_id }, lookups)) {
-    redirect(`/vehicles/${vehicleId}?error=driver-permission`);
+    throw new Error("Unauthorized: No access to driver's circle");
   }
 
   const { error } = await supabase.rpc("replace_driver_assignment", {
     p_vehicle_id: vehicleId,
     p_driver_id: driverId,
     p_shift: shift,
-    p_from_date: textValue(formData, "from_date") ?? today(),
-    p_remarks: textValue(formData, "remarks"),
+    p_from_date: (formData.get("from_date") as string) || today(),
+    p_remarks: formData.get("remarks") as string,
   });
 
-  if (error) redirect(`/vehicles/${vehicleId}?error=driver-failed`);
+  if (error) throw new Error("Driver assignment failed: " + error.message);
 
   revalidatePath(`/vehicles/${vehicleId}`);
   revalidatePath("/drivers");
@@ -245,29 +229,28 @@ export async function replaceDriverAssignmentAction(formData: FormData) {
 export async function createDriverAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
+  if (!canManageDrivers(profile)) throw new Error("Unauthorized");
+
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = driverSchema.safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    redirect(`/drivers?error=${encodeURIComponent(error)}`);
+  }
+
+  const data = validated.data;
+  if (!canAccessLocation(profile, { circleId: data.circle_id }, lookups)) {
+    throw new Error("Unauthorized access to this circle");
+  }
+
   const supabase = requireAdminClient();
-  if (!canManageDrivers(profile)) redirect("/drivers?error=permission");
+  const { error } = await supabase.from("drivers").insert(data);
 
-  const name = textValue(formData, "name");
-  const circleId = textValue(formData, "circle_id");
-  if (!name || !circleId) redirect("/drivers?error=missing-required");
-  const driverCircleAllowed =
-    profile.role === "division_incharge"
-      ? profile.circle_id === circleId
-      : canAccessLocation(profile, { circleId }, lookups);
-  if (!driverCircleAllowed) redirect("/drivers?error=permission");
-
-  await supabase.from("drivers").insert({
-    name,
-    mobile: textValue(formData, "mobile"),
-    license_no: textValue(formData, "license_no"),
-    license_expiry: textValue(formData, "license_expiry"),
-    address: textValue(formData, "address"),
-    circle_id: circleId,
-    status: textValue(formData, "status") ?? "active",
-  });
+  if (error) throw new Error("Failed to create driver: " + error.message);
 
   revalidatePath("/drivers");
   revalidatePath("/alerts");
   redirect("/drivers?created=1");
 }
+
