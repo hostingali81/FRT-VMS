@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FRT Vehicle Management System
 
-## Getting Started
+Web-based multi-circle FRT vehicle management for The Imperial Electric Company.
 
-First, run the development server:
+## Stack
+
+- Next.js 14 App Router
+- Tailwind CSS
+- Supabase PostgreSQL, Auth, RLS, Storage
+- Recharts, Lucide, XLSX export
+
+## Local Run
 
 ```bash
+npm install
+cp .env.local.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app has demo fallback data, so it runs even before Supabase keys are added.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Supabase Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Project URL:
 
-## Learn More
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://basfgceiklbzcjdfbmij.supabase.co
+```
 
-To learn more about Next.js, take a look at the following resources:
+Add these keys in `.env.local` from Supabase Dashboard -> Project Settings -> API:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```env
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Apply database migrations after the CLI account has access to the project:
 
-## Deploy on Vercel
+```bash
+npx supabase login
+npx supabase link --project-ref basfgceiklbzcjdfbmij --password YOUR_DB_PASSWORD
+npx supabase db push
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The migrations create hierarchy tables, vehicle/driver masters, current assignments, append-only histories, document storage bucket, RLS helper policies, dashboard views, RPC transfer/status functions, and Barabanki seed data.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Verification
+
+```bash
+npm run lint
+npm run build
+```
+

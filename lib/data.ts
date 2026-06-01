@@ -1,0 +1,440 @@
+import {
+  buildCircleSummaries,
+  buildDivisionSummaries,
+  mockActivity,
+  mockDriverAssignments,
+  mockDrivers,
+  mockLookups,
+  mockStatusHistory,
+  mockTransfers,
+  mockVehicles,
+} from "@/lib/mock-data";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { accessibleCircleIds, accessibleDivisionIds, canSeeVehicle, filterLookupsForProfile } from "@/lib/permissions";
+import type {
+  ActivityItem,
+  AdminUserRow,
+  Circle,
+  CircleSummary,
+  Division,
+  DivisionSummary,
+  DriverAssignment,
+  DriverRecord,
+  FleetVehicle,
+  LookupData,
+  StatusHistoryItem,
+  Substation,
+  TransferRecord,
+  UserProfile,
+  VehicleHistoryItem,
+} from "@/lib/types";
+import { getWorstDocumentState } from "@/lib/utils/expiry";
+
+async function selectRows<T>(view: string, fallback: T[], orderColumn?: string) {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return fallback;
+
+  let query = supabase.from(view as never).select("*");
+  if (orderColumn) {
+    query = query.order(orderColumn, { ascending: false }) as typeof query;
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return fallback;
+
+  return data as T[];
+}
+
+export async function getAllLookups(): Promise<LookupData> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockLookups;
+
+  const [zones, circles, divisions, substations] = await Promise.all([
+    supabase.from("zones").select("id,name").order("name"),
+    supabase.from("circles").select("id,name,zone_id,state,discom,contract_ref").order("name"),
+    supabase.from("divisions").select("id,name,circle_id").order("name"),
+    supabase.from("substations").select("id,name,division_id").order("name"),
+  ]);
+
+  if (zones.error || circles.error || divisions.error || substations.error) return mockLookups;
+
+  return {
+    zones: (zones.data ?? []) as LookupData["zones"],
+    circles: (circles.data ?? []) as Circle[],
+    divisions: (divisions.data ?? []) as Division[],
+    substations: (substations.data ?? []) as Substation[],
+  };
+}
+
+export async function getLookups(profile?: UserProfile | null): Promise<LookupData> {
+  const lookups = await getAllLookups();
+  return profile ? filterLookupsForProfile(lookups, profile) : lookups;
+}
+
+export async function getVehicles(profile?: UserProfile | null): Promise<FleetVehicle[]> {
+  const vehicles = await selectRows<FleetVehicle>("vehicle_current_view", mockVehicles, "registration_no");
+  if (!profile) return vehicles;
+
+  const lookups = await getAllLookups();
+  return vehicles.filter((vehicle) => canSeeVehicle(profile, vehicle, lookups));
+}
+
+export async function getVehicle(id: string, profile?: UserProfile | null) {
+  const vehicles = await getVehicles(profile);
+  return vehicles.find((vehicle) => vehicle.vehicle_id === id || vehicle.registration_no === decodeURIComponent(id));
+}
+
+function buildCircleSummariesFrom(vehicles: FleetVehicle[], lookups: LookupData): CircleSummary[] {
+  return lookups.circles.map((circle) => {
+    const rows = vehicles.filter(
+      (vehicle) =>
+        vehicle.status !== "removed" &&
+        (vehicle.home_circle_id === circle.id || vehicle.current_circle_id === circle.id),
+    );
+
+    return {
+      circle_id: circle.id,
+      circle: circle.name,
+      total: rows.length,
+      active: rows.filter((row) => row.status === "active").length,
+      maintenance: rows.filter((row) => row.status === "maintenance").length,
+      breakdown: rows.filter((row) => row.status === "breakdown").length,
+      standby: rows.filter((row) => row.status === "standby").length,
+      documents_expiring: rows.filter((row) =>
+        ["expiring", "expired"].includes(
+          getWorstDocumentState([row.insurance_expiry, row.fitness_expiry, row.pollution_expiry]),
+        ),
+      ).length,
+    };
+  });
+}
+
+function buildDivisionSummariesFrom(vehicles: FleetVehicle[], lookups: LookupData): DivisionSummary[] {
+  return lookups.divisions.map((division) => {
+    const circle = lookups.circles.find((item) => item.id === division.circle_id);
+    const rows = vehicles.filter((vehicle) => vehicle.division_id === division.id && vehicle.status !== "removed");
+
+    return {
+      circle_id: division.circle_id,
+      circle: circle?.name ?? "Unknown",
+      division_id: division.id,
+      division: division.name,
+      total: rows.length,
+      active: rows.filter((row) => row.status === "active").length,
+      maintenance: rows.filter((row) => row.status === "maintenance").length,
+      breakdown: rows.filter((row) => row.status === "breakdown").length,
+      standby: rows.filter((row) => row.status === "standby").length,
+    };
+  });
+}
+
+export async function getCircleSummaries(profile?: UserProfile | null): Promise<CircleSummary[]> {
+  if (profile && profile.role !== "super_admin") {
+    const [vehicles, lookups] = await Promise.all([getVehicles(profile), getLookups(profile)]);
+    return buildCircleSummariesFrom(vehicles, lookups).filter((row) => row.total > 0 || row.circle_id === profile.circle_id);
+  }
+
+  const rows = await selectRows<CircleSummary>("circle_fleet_summary", [], "circle");
+  if (rows.length > 0) return rows;
+  return buildCircleSummaries(await getVehicles(profile));
+}
+
+export async function getDivisionSummaries(profile?: UserProfile | null): Promise<DivisionSummary[]> {
+  if (profile && profile.role !== "super_admin") {
+    const [vehicles, lookups] = await Promise.all([getVehicles(profile), getLookups(profile)]);
+    return buildDivisionSummariesFrom(vehicles, lookups);
+  }
+
+  const rows = await selectRows<DivisionSummary>("division_fleet_summary", [], "division");
+  if (rows.length > 0) return rows;
+  return buildDivisionSummaries(await getVehicles(profile));
+}
+
+export async function getTransfers(profile?: UserProfile | null): Promise<TransferRecord[]> {
+  const transfers = await selectRows<TransferRecord>("transfer_history_view", mockTransfers, "transfer_date");
+  if (!profile) return transfers;
+
+  const lookups = await getAllLookups();
+  const circleIds = accessibleCircleIds(profile, lookups);
+  const divisionIds = accessibleDivisionIds(profile, lookups);
+
+  return transfers.filter(
+    (transfer) =>
+      (transfer.from_circle_id ? circleIds.has(transfer.from_circle_id) : false) ||
+      (transfer.to_circle_id ? circleIds.has(transfer.to_circle_id) : false) ||
+      (transfer.from_division_id ? divisionIds.has(transfer.from_division_id) : false) ||
+      (transfer.to_division_id ? divisionIds.has(transfer.to_division_id) : false),
+  );
+}
+
+export async function getDrivers(profile?: UserProfile | null): Promise<DriverRecord[]> {
+  const drivers = await selectRows<DriverRecord>("driver_current_view", mockDrivers, "name");
+  if (!profile) return drivers;
+
+  const lookups = await getAllLookups();
+  const circleIds = accessibleCircleIds(profile, lookups);
+  const divisionIds = accessibleDivisionIds(profile, lookups);
+  const vehicles = await getVehicles(profile);
+  const visibleVehicleIds = new Set(vehicles.map((vehicle) => vehicle.vehicle_id));
+
+  return drivers.filter(
+    (driver) =>
+      circleIds.has(driver.circle_id) ||
+      (driver.vehicle_id ? visibleVehicleIds.has(driver.vehicle_id) : false) ||
+      (driver.vehicle_id && driver.shift && profile.division_id ? divisionIds.has(profile.division_id) : false),
+  );
+}
+
+export async function getActivity(profile?: UserProfile | null): Promise<ActivityItem[]> {
+  const rows = await selectRows<ActivityItem>("activity_feed_view", mockActivity, "created_at");
+  if (!profile) return rows.slice(0, 10);
+
+  const lookups = await getAllLookups();
+  const circleIds = accessibleCircleIds(profile, lookups);
+  const divisionIds = accessibleDivisionIds(profile, lookups);
+
+  return rows
+    .filter(
+      (item) =>
+        (item.circle_id ? circleIds.has(item.circle_id) : false) ||
+        (item.division_id ? divisionIds.has(item.division_id) : false),
+    )
+    .slice(0, 10);
+}
+
+export async function getDriverAssignments(vehicleId: string, profile?: UserProfile | null): Promise<DriverAssignment[]> {
+  if (profile) {
+    const vehicle = await getVehicle(vehicleId, profile);
+    if (!vehicle) return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockDriverAssignments.filter((item) => item.vehicle_id === vehicleId);
+
+  const { data, error } = await supabase
+    .from("driver_assignments")
+    .select("id,vehicle_id,driver_id,shift,from_date,to_date,remarks,drivers(name,mobile,license_no)")
+    .eq("vehicle_id", vehicleId)
+    .order("from_date", { ascending: false });
+
+  if (error || !data) return mockDriverAssignments.filter((item) => item.vehicle_id === vehicleId);
+
+  return data.map((row) => {
+    const driver = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
+    return {
+      id: row.id,
+      vehicle_id: row.vehicle_id,
+      driver_id: row.driver_id,
+      driver_name: driver?.name ?? "Unknown driver",
+      mobile: driver?.mobile ?? null,
+      license_no: driver?.license_no ?? null,
+      shift: row.shift as DriverAssignment["shift"],
+      from_date: row.from_date,
+      to_date: row.to_date,
+      remarks: row.remarks,
+    };
+  });
+}
+
+async function getCurrentDriverAssignmentsForVehicles(vehicleIds: string[]) {
+  if (vehicleIds.length === 0) return [];
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) {
+    return mockDriverAssignments.filter((item) => vehicleIds.includes(item.vehicle_id) && !item.to_date);
+  }
+
+  const { data, error } = await supabase
+    .from("driver_assignments")
+    .select("id,vehicle_id,driver_id,shift,from_date,to_date,remarks,drivers(name,mobile,license_no)")
+    .in("vehicle_id", vehicleIds)
+    .is("to_date", null);
+
+  if (error || !data) {
+    return mockDriverAssignments.filter((item) => vehicleIds.includes(item.vehicle_id) && !item.to_date);
+  }
+
+  return data.map((row) => {
+    const driver = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
+    return {
+      id: row.id,
+      vehicle_id: row.vehicle_id,
+      driver_id: row.driver_id,
+      driver_name: driver?.name ?? "Unknown driver",
+      mobile: driver?.mobile ?? null,
+      license_no: driver?.license_no ?? null,
+      shift: row.shift as DriverAssignment["shift"],
+      from_date: row.from_date,
+      to_date: row.to_date,
+      remarks: row.remarks,
+    };
+  });
+}
+
+export async function getStatusHistory(vehicleId: string, profile?: UserProfile | null): Promise<StatusHistoryItem[]> {
+  if (profile) {
+    const vehicle = await getVehicle(vehicleId, profile);
+    if (!vehicle) return [];
+  }
+
+  const rows = await selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date");
+  return rows.filter((row) => row.vehicle_id === vehicleId);
+}
+
+export async function getAllStatusHistory(profile?: UserProfile | null): Promise<StatusHistoryItem[]> {
+  const rows = await selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date");
+  if (!profile) return rows;
+
+  const vehicles = await getVehicles(profile);
+  const visibleVehicleIds = new Set(vehicles.map((vehicle) => vehicle.vehicle_id));
+  return rows.filter((row) => visibleVehicleIds.has(row.vehicle_id));
+}
+
+export async function getVehicleTransfers(vehicleId: string, profile?: UserProfile | null): Promise<TransferRecord[]> {
+  const transfers = await getTransfers(profile);
+  return transfers.filter((transfer) => transfer.vehicle_id === vehicleId);
+}
+
+function location(parts: Array<string | null | undefined>) {
+  const value = parts.filter(Boolean).join(" / ");
+  return value || null;
+}
+
+function statusCategory(status: StatusHistoryItem["status"]) {
+  if (status === "removed") return "Permanent Removed";
+  if (status === "standby") return "Temporary Removed / Standby";
+  if (status === "maintenance") return "Temporary Removed / Maintenance";
+  if (status === "breakdown") return "Temporary Removed / Breakdown";
+  if (status === "accident") return "Temporary Removed / Accident";
+  return "Status Restored / Active";
+}
+
+export async function getVehicleHistory(profile?: UserProfile | null): Promise<VehicleHistoryItem[]> {
+  const [vehicles, transfers, statuses] = await Promise.all([
+    getVehicles(profile),
+    getTransfers(profile),
+    getAllStatusHistory(profile),
+  ]);
+
+  const vehicleById = new Map(vehicles.map((vehicle) => [vehicle.vehicle_id, vehicle]));
+
+  const transferItems: VehicleHistoryItem[] = transfers.map((transfer) => ({
+    id: `transfer-${transfer.id}`,
+    vehicle_id: transfer.vehicle_id,
+    registration_no: transfer.registration_no,
+    event_date: transfer.transfer_date,
+    event_type: "transfer",
+    category: transfer.is_cross_circle ? "Cross-Circle Movement" : "Substation Movement",
+    from_location: location([transfer.from_circle, transfer.from_division, transfer.from_substation]),
+    to_location: location([transfer.to_circle, transfer.to_division, transfer.to_substation]),
+    status: null,
+    reason: transfer.reason,
+    approved_or_recorded_by: transfer.approved_by,
+    remarks: transfer.remarks,
+    is_cross_circle: transfer.is_cross_circle,
+  }));
+
+  const statusItems: VehicleHistoryItem[] = statuses.map((status) => {
+    const vehicle = vehicleById.get(status.vehicle_id);
+
+    return {
+      id: `status-${status.id}`,
+      vehicle_id: status.vehicle_id,
+      registration_no: vehicle?.registration_no ?? "Unknown vehicle",
+      event_date: status.from_date,
+      event_type: "status",
+      category: statusCategory(status.status),
+      from_location: location([vehicle?.current_circle, vehicle?.division, vehicle?.substation]),
+      to_location: null,
+      status: status.status,
+      reason: statusCategory(status.status),
+      approved_or_recorded_by: status.recorded_by,
+      remarks: status.remarks,
+      is_cross_circle: false,
+    };
+  });
+
+  return [...transferItems, ...statusItems].sort((a, b) => {
+    const dateCompare = b.event_date.localeCompare(a.event_date);
+    if (dateCompare !== 0) return dateCompare;
+    return a.registration_no.localeCompare(b.registration_no);
+  });
+}
+
+export async function getDashboardData(profile?: UserProfile | null) {
+  const [vehicles, circles, divisions, drivers, activity] = await Promise.all([
+    getVehicles(profile),
+    getCircleSummaries(profile),
+    getDivisionSummaries(profile),
+    getDrivers(profile),
+    getActivity(profile),
+  ]);
+
+  const visibleVehicles = vehicles.filter((vehicle) => vehicle.status !== "removed");
+
+  return {
+    vehicles,
+    circles,
+    divisions,
+    activity,
+    summary: {
+      totalCircles: circles.length,
+      totalVehicles: visibleVehicles.length,
+      activeVehicles: visibleVehicles.filter((vehicle) => vehicle.status === "active").length,
+      maintenanceOrBreakdown: visibleVehicles.filter((vehicle) => ["maintenance", "breakdown"].includes(vehicle.status)).length,
+      expiringDocs: visibleVehicles.filter((vehicle) =>
+        ["expiring", "expired"].includes(
+          getWorstDocumentState([vehicle.insurance_expiry, vehicle.fitness_expiry, vehicle.pollution_expiry]),
+        ),
+      ).length,
+      activeDrivers: drivers.filter((driver) => driver.status === "active").length,
+    },
+  };
+}
+
+export async function getAlertsData(profile?: UserProfile | null) {
+  const [vehicles, drivers] = await Promise.all([getVehicles(profile), getDrivers(profile)]);
+  const assignments = await getCurrentDriverAssignmentsForVehicles(vehicles.map((vehicle) => vehicle.vehicle_id));
+
+  const documentAlerts = vehicles.filter((vehicle) =>
+    ["expiring", "expired"].includes(
+      getWorstDocumentState([vehicle.insurance_expiry, vehicle.fitness_expiry, vehicle.pollution_expiry]),
+    ),
+  );
+
+  const driverLicenseAlerts = drivers.filter((driver) =>
+    ["expiring", "expired"].includes(getWorstDocumentState([driver.license_expiry])),
+  );
+
+  const vehiclesWithoutAllDrivers = vehicles.filter((vehicle) => {
+    const activeAssignments = assignments.filter((assignment) => assignment.vehicle_id === vehicle.vehicle_id && !assignment.to_date);
+    const shifts = new Set(activeAssignments.map((assignment) => assignment.shift));
+    return vehicle.status !== "removed" && shifts.size < 3;
+  });
+
+  return { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers };
+}
+
+export async function getAdminUsers(): Promise<AdminUserRow[]> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return [];
+
+  const [{ data: profiles }, usersResult] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("id,name,role,circle_id,division_id,zone_id,is_active,created_at,updated_at")
+      .order("created_at", { ascending: false }),
+    supabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+  ]);
+
+  const users = usersResult.data?.users ?? [];
+
+  return ((profiles ?? []) as UserProfile[]).map((profile) => {
+    const authUser = users.find((user) => user.id === profile.id);
+    return {
+      ...profile,
+      email: authUser?.email ?? null,
+      last_sign_in_at: authUser?.last_sign_in_at ?? null,
+    };
+  });
+}
