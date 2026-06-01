@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,12 +54,7 @@ export default function LoginPage() {
             {message ? <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{message}</p> : null}
             <Button type="submit" className="w-full">Sign In</Button>
           </form>
-          <div className="mt-4 border-t border-slate-200 pt-4 text-center text-sm text-slate-500">
-            First time setup?{" "}
-            <Link href="/setup" className="font-semibold text-slate-900 hover:underline">
-              Create Super Admin
-            </Link>
-          </div>
+
         </CardContent>
       </Card>
     </main>
