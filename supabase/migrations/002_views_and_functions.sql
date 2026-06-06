@@ -333,7 +333,7 @@ as $$
 declare
   assignment_id uuid;
 begin
-  if p_shift not in ('morning', 'evening', 'night') then
+  if p_shift not in ('shift_a', 'shift_b', 'shift_c') then
     raise exception 'Invalid shift: %', p_shift;
   end if;
 

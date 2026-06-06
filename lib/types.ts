@@ -7,7 +7,7 @@ export const VEHICLE_STATUSES = [
   "accident",
 ] as const;
 
-export const DRIVER_SHIFTS = ["morning", "evening", "night"] as const;
+export const DRIVER_SHIFTS = ["shift_a", "shift_b", "shift_c"] as const;
 export const FUEL_OWNERSHIPS = ["company", "vendor"] as const;
 export const USER_ROLES = [
   "super_admin",

@@ -260,7 +260,7 @@ export const mockDrivers: DriverRecord[] = [
     circle: "Barabanki",
     vehicle_id: "vehicle-up32-ab-1245",
     registration_no: "UP32 AB 1245",
-    shift: "morning",
+    shift: "shift_a",
     assigned_from: iso(-40),
   },
   {
@@ -275,7 +275,7 @@ export const mockDrivers: DriverRecord[] = [
     circle: "Barabanki",
     vehicle_id: "vehicle-up32-ab-1245",
     registration_no: "UP32 AB 1245",
-    shift: "evening",
+    shift: "shift_b",
     assigned_from: iso(-20),
   },
   {
@@ -290,7 +290,7 @@ export const mockDrivers: DriverRecord[] = [
     circle: "Barabanki",
     vehicle_id: "vehicle-up41-af-5521",
     registration_no: "UP41 AF 5521",
-    shift: "morning",
+    shift: "shift_a",
     assigned_from: iso(-27),
   },
   {
@@ -305,7 +305,7 @@ export const mockDrivers: DriverRecord[] = [
     circle: "Barabanki",
     vehicle_id: "vehicle-up41-gh-7712",
     registration_no: "UP41 GH 7712",
-    shift: "night",
+    shift: "shift_c",
     assigned_from: iso(-11),
   },
   {
@@ -415,10 +415,10 @@ export const mockDriverAssignments: DriverAssignment[] = [
     driver_name: "Ramesh Yadav",
     mobile: "9450001001",
     license_no: "UP142026001",
-    shift: "morning",
+    shift: "shift_a",
     from_date: iso(-40),
     to_date: null,
-    remarks: "Regular morning shift",
+    remarks: "Shift A duty",
   },
   {
     id: "driver-assignment-2",
@@ -427,10 +427,10 @@ export const mockDriverAssignments: DriverAssignment[] = [
     driver_name: "Sajid Ali",
     mobile: "9450001002",
     license_no: "UP142026002",
-    shift: "evening",
+    shift: "shift_b",
     from_date: iso(-20),
     to_date: null,
-    remarks: "Evening feeder duty",
+    remarks: "Shift B feeder duty",
   },
   {
     id: "driver-assignment-3",
@@ -439,7 +439,7 @@ export const mockDriverAssignments: DriverAssignment[] = [
     driver_name: "Mohan Singh",
     mobile: "9450001003",
     license_no: "UP142026003",
-    shift: "morning",
+    shift: "shift_a",
     from_date: iso(-27),
     to_date: null,
     remarks: null,
@@ -451,10 +451,10 @@ export const mockDriverAssignments: DriverAssignment[] = [
     driver_name: "Dinesh Pal",
     mobile: "9450001004",
     license_no: "UP142026004",
-    shift: "night",
+    shift: "shift_c",
     from_date: iso(-11),
     to_date: null,
-    remarks: "Night emergency duty",
+    remarks: "Shift C emergency duty",
   },
 ];
 

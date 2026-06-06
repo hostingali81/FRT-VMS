@@ -135,7 +135,7 @@ create table if not exists public.driver_assignments (
   id uuid primary key default gen_random_uuid(),
   vehicle_id uuid not null references public.vehicles(id) on delete cascade,
   driver_id uuid not null references public.drivers(id),
-  shift text not null check (shift in ('morning', 'evening', 'night')),
+  shift text not null check (shift in ('shift_a', 'shift_b', 'shift_c')),
   from_date date not null,
   to_date date,
   remarks text,

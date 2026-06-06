@@ -13,7 +13,7 @@ import { formatDate, titleCase } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 type QuickAction = "status" | "fuel" | null;
-type ShiftKey = "morning" | "evening" | "night";
+type ShiftKey = "shift_a" | "shift_b" | "shift_c";
 
 const TABS = ["Overview", "Drivers", "Transfers", "Status History", "Fuel History", "Driver History", "Documents"] as const;
 type TabName = (typeof TABS)[number];
@@ -279,13 +279,14 @@ export function VehicleProfileTabs({
         {/* ─── DRIVERS ─── */}
         {tab === "Drivers" && (
           <div className="grid gap-4 md:grid-cols-3">
-            {(["morning", "evening", "night"] as const).map((shift) => {
+            {(["shift_a", "shift_b", "shift_c"] as const).map((shift) => {
               const driver = currentDrivers.find((d) => d.shift === shift);
               const isOpen = openShift === shift;
+              const shiftLabel = shift === "shift_a" ? "Shift A" : shift === "shift_b" ? "Shift B" : "Shift C";
               return (
                 <Card key={shift}>
                   <CardHeader>
-                    <CardTitle>{titleCase(shift)} Shift</CardTitle>
+                    <CardTitle>{shiftLabel}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Driver info */}

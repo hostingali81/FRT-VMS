@@ -170,10 +170,10 @@ on conflict do nothing;
 insert into public.driver_assignments (vehicle_id, driver_id, shift, from_date, remarks)
 select v.id, d.id, rows.shift, current_date - rows.offset_days, 'Seed assignment'
 from (values
-  ('UP32 AB 1245', 'Ramesh Yadav', 'morning', 40),
-  ('UP32 AB 1245', 'Sajid Ali', 'evening', 20),
-  ('UP41 AF 5521', 'Mohan Singh', 'morning', 27),
-  ('UP41 GH 7712', 'Dinesh Pal', 'night', 11)
+  ('UP32 AB 1245', 'Ramesh Yadav', 'shift_a', 40),
+  ('UP32 AB 1245', 'Sajid Ali', 'shift_b', 20),
+  ('UP41 AF 5521', 'Mohan Singh', 'shift_a', 27),
+  ('UP41 GH 7712', 'Dinesh Pal', 'shift_c', 11)
 ) as rows(registration_no, driver_name, shift, offset_days)
 join public.vehicles v on v.registration_no = rows.registration_no
 join public.drivers d on d.name = rows.driver_name
