@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Download, Edit3, Filter, RefreshCcw, Search, X 
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Button, LinkButton } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -207,29 +208,27 @@ export function VehicleTable({
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">{filtered.length} vehicles visible</p>
         {canExport && (
-          <div className="grid grid-cols-2 gap-2 sm:flex">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              onClick={() =>
-                exportRows(
-                  "frt-vehicles",
-                  filtered.map((vehicle) => ({
-                    Registration: vehicle.registration_no,
-                    Type: vehicle.vehicle_type,
-                    Circle: vehicle.current_circle,
-                    Division: vehicle.division,
-                    Substation: vehicle.substation,
-                    Status: vehicle.status,
-                    Vendor: vehicle.vendor_name,
-                  })),
-                )
-              }
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Export
-            </button>
-          </div>
+          <Button
+            variant="outline"
+            className="h-9 px-3 text-xs"
+            onClick={() =>
+              exportRows(
+                "frt-vehicles",
+                filtered.map((vehicle) => ({
+                  Registration: vehicle.registration_no,
+                  Type: vehicle.vehicle_type,
+                  Circle: vehicle.current_circle,
+                  Division: vehicle.division,
+                  Substation: vehicle.substation,
+                  Status: vehicle.status,
+                  Vendor: vehicle.vendor_name,
+                })),
+              )
+            }
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            Export
+          </Button>
         )}
       </div>
       <div className="overflow-x-auto">
@@ -275,27 +274,27 @@ export function VehicleTable({
                   <td data-label="Document Status" className="px-5 py-4">
                     <ExpiryBadge date={date} />
                   </td>
-                  <td data-label="Action" className="px-5 py-4 text-right">
-                    <div className="flex justify-end gap-2">
+                  <td data-label="Action" className="px-5 py-4">
+                    <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:justify-end sm:gap-2">
                       {canUpdate || editableIds.has(vehicle.vehicle_id) ? (
-                        <Link
+                        <LinkButton
                           href={`/vehicles/${vehicle.vehicle_id}/edit`}
-                          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                          title="Vehicle update"
+                          variant="outline"
+                          className="h-9 px-3 text-xs"
                         >
-                          <Edit3 className="h-4 w-4" aria-hidden="true" />
-                          Vehicle Update
-                        </Link>
+                          <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Edit
+                        </LinkButton>
                       ) : null}
                       {transferableIds.has(vehicle.vehicle_id) ? (
-                        <Link
+                        <LinkButton
                           href={`/vehicles/${vehicle.vehicle_id}/transfer`}
-                          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-950 bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800"
-                          title="Change location"
+                          variant="primary"
+                          className="h-9 px-3 text-xs"
                         >
-                          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-                          Change Location
-                        </Link>
+                          <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                          Transfer
+                        </LinkButton>
                       ) : null}
                     </div>
                   </td>

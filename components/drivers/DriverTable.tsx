@@ -2,6 +2,7 @@
 
 import { Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import type { DriverRecord } from "@/lib/types";
@@ -13,9 +14,9 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3">
         <p className="text-sm text-slate-600">{drivers.length} drivers</p>
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        <Button
+          variant="outline"
+          className="h-9 px-3 text-xs"
           onClick={() =>
             exportRows(
               "frt-drivers",
@@ -32,9 +33,9 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
             )
           }
         >
-          <Download className="h-4 w-4" aria-hidden="true" />
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
           Export
-        </button>
+        </Button>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-[900px] w-full divide-y divide-slate-200 text-sm">

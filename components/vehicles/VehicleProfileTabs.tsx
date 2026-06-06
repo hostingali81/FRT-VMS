@@ -7,7 +7,9 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Timeline } from "@/components/shared/Timeline";
+import { Badge } from "@/components/ui/badge";
 import type { DriverAssignment, DriverRecord, FleetVehicle, FuelOwnershipHistoryItem, StatusHistoryItem, TransferRecord } from "@/lib/types";
 import { formatDate, titleCase } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -120,25 +122,12 @@ export function VehicleProfileTabs({
                   <Field label="Type">{vehicle.vehicle_type ?? "—"}</Field>
                   <Field label="Fuel Type">{vehicle.fuel_type ?? "—"}</Field>
                   <Field label="Fuel Ownership">
-                    <span className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold",
-                      vehicle.fuel_ownership === "vendor"
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-blue-100 text-blue-800",
-                    )}>
+                    <Badge tone={vehicle.fuel_ownership === "vendor" ? "yellow" : "blue"}>
                       {vehicle.fuel_ownership === "vendor" ? "Vendor Fuel" : "Company Fuel"}
-                    </span>
+                    </Badge>
                   </Field>
                   <Field label="Status">
-                    <span className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold",
-                      vehicle.status === "active" ? "bg-emerald-100 text-emerald-800"
-                        : vehicle.status === "maintenance" ? "bg-yellow-100 text-yellow-800"
-                        : vehicle.status === "breakdown" ? "bg-red-100 text-red-800"
-                        : "bg-slate-100 text-slate-700",
-                    )}>
-                      {titleCase(vehicle.status)}
-                    </span>
+                    <StatusBadge status={vehicle.status} />
                   </Field>
                   <Field label="Model Year">{vehicle.model_year ? String(vehicle.model_year) : "—"}</Field>
                   <Field label="Owner">
