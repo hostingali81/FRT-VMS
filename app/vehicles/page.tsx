@@ -5,13 +5,17 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { VehicleTable } from "@/components/vehicles/VehicleTable";
 import { requireProfile } from "@/lib/auth";
 import { getLookups, getVehicles } from "@/lib/data";
-import { canCreateVehicle } from "@/lib/permissions";
+import { canCreateVehicle, canEditVehicle, canInitiateTransfer } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function VehiclesPage() {
   const profile = await requireProfile();
   const [vehicles, lookups] = await Promise.all([getVehicles(profile), getLookups(profile)]);
+  const editableVehicleIds = vehicles.filter((vehicle) => canEditVehicle(profile, vehicle, lookups)).map((vehicle) => vehicle.vehicle_id);
+  const transferableVehicleIds = vehicles
+    .filter((vehicle) => canInitiateTransfer(profile, vehicle, lookups))
+    .map((vehicle) => vehicle.vehicle_id);
 
   return (
     <AppShell profile={profile}>
@@ -27,8 +31,8 @@ export default async function VehiclesPage() {
         <VehicleTable
           vehicles={vehicles}
           lookups={lookups}
-          canCreate={canCreateVehicle(profile)}
-          canUpdate={canCreateVehicle(profile)}
+          editableVehicleIds={editableVehicleIds}
+          transferableVehicleIds={transferableVehicleIds}
         />
       </div>
     </AppShell>

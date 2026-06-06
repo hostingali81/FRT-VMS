@@ -1,25 +1,20 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseAdminClient, createSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import type { LookupData, UserProfile, UserRole } from "@/lib/types";
 
-export const ROLE_LABELS: Record<UserRole, string> = {
-  super_admin: "Super Admin",
-  zonal_manager: "Zonal Manager",
-  circle_incharge: "Circle Incharge",
-  division_incharge: "Division Incharge",
-  viewer: "Viewer",
-};
+export { ROLE_LABELS } from "@/lib/types";
 
-export async function getSessionUser() {
+export const getSessionUser = cache(async () => {
   if (!isSupabaseConfigured()) return null;
 
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;
   return data.user;
-}
+});
 
-export async function getCurrentProfile(): Promise<UserProfile | null> {
+export const getCurrentProfile = cache(async (): Promise<UserProfile | null> => {
   const user = await getSessionUser();
   if (!user) return null;
 
@@ -34,7 +29,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
 
   if (error || !data || !data.is_active) return null;
   return data as UserProfile;
-}
+});
 
 export async function requireProfile(): Promise<UserProfile> {
   const user = await getSessionUser();
@@ -65,12 +60,7 @@ export async function getProfileCount() {
 }
 
 export function formatScope(profile: UserProfile, lookups?: LookupData) {
-  if (profile.role === "super_admin") return "All Circles";
-
-  if (profile.role === "zonal_manager") {
-    const zone = lookups?.zones?.find((item) => item.id === profile.zone_id);
-    return zone ? `Zone: ${zone.name}` : "Assigned Zone";
-  }
+  if (profile.role === "super_admin" || profile.role === "zonal_manager") return "All Circles";
 
   const circle = lookups?.circles.find((item) => item.id === profile.circle_id);
   const division = lookups?.divisions.find((item) => item.id === profile.division_id);

@@ -39,7 +39,7 @@ export default async function AlertsPage() {
             {driverLicenseAlerts.map((driver) => (
               <div key={driver.driver_id} className="rounded-md border border-slate-200 p-3">
                 <p className="font-semibold text-slate-950">{driver.name}</p>
-                <p className="text-sm text-slate-500">{driver.circle} / {driver.mobile ?? "No mobile"}</p>
+                <p className="break-words text-sm text-slate-500">{driver.circle} / {driver.mobile ?? "No mobile"}</p>
                 <div className="mt-2">
                   <ExpiryBadge date={driver.license_expiry} />
                 </div>
@@ -54,7 +54,7 @@ export default async function AlertsPage() {
                 <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
                   {vehicle.registration_no}
                 </Link>
-                <p className="mt-1 text-sm text-slate-500">{vehicle.division ?? "Unassigned"} / {vehicle.substation ?? "Unassigned"}</p>
+                <p className="mt-1 break-words text-sm text-slate-500">{vehicle.division ?? "Unassigned"} / {vehicle.substation ?? "Unassigned"}</p>
                 <Badge tone="yellow" className="mt-2">One or more shifts empty</Badge>
               </div>
             ))}

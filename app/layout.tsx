@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Suspense } from "react";
+import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 import { ToastProvider } from "@/components/shared/ToastProvider";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <NextTopLoader color="#3b82f6" height={3} showSpinner={false} shadow={false} />
         <Suspense>
           <ToastProvider />
         </Suspense>

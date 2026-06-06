@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { USER_ROLES } from "@/lib/types";
 import type { UserRole } from "@/lib/types";
 
 function textValue(formData: FormData, key: string) {
@@ -29,6 +30,8 @@ export async function createUserAction(formData: FormData) {
   const role = textValue(formData, "role") as UserRole | null;
 
   if (!email || !password || !name || !role) redirect("/admin?error=user-required");
+  if (password.length < 12) redirect("/admin?error=password-too-short");
+  if (!(USER_ROLES as readonly string[]).includes(role)) redirect("/admin?error=invalid-role");
 
   const { data, error } = await supabase.auth.admin.createUser({
     email,
@@ -63,6 +66,7 @@ export async function updateUserProfileAction(formData: FormData) {
   const role = textValue(formData, "role") as UserRole | null;
 
   if (!userId || !name || !role) redirect("/admin?error=user-required");
+  if (!(USER_ROLES as readonly string[]).includes(role)) redirect("/admin?error=invalid-role");
 
   const { error } = await supabase
     .from("user_profiles")

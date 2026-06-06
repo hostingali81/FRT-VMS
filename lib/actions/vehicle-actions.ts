@@ -6,7 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getVehicle } from "@/lib/data";
 import { canAccessLocation, canCreateVehicle, canEditVehicle, canManageDrivers, canTransferVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { driverSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
+import { driverSchema, fuelOwnershipSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -54,6 +54,15 @@ export async function createVehicleAction(formData: FormData) {
     .single();
 
   if (error || !vehicle) throw new Error("Failed to create vehicle: " + error?.message);
+
+  // Initial fuel ownership history record (always, not just when assigned)
+  await supabase.from("vehicle_fuel_ownership_history").insert({
+    vehicle_id: vehicle.id,
+    ownership: data.fuel_ownership ?? "company",
+    from_date: (formData.get("assigned_from") as string) || today(),
+    changed_by: profile.name,
+    remarks: "Vehicle created",
+  });
 
   if (divisionId && substationId) {
     await supabase.from("vehicle_assignments").insert({
@@ -190,6 +199,37 @@ export async function changeVehicleStatusAction(formData: FormData) {
   revalidatePath("/vehicle-history");
   revalidatePath("/dashboard");
   redirect(`/vehicles/${data.vehicle_id}?status=1`);
+}
+
+export async function changeFuelOwnershipAction(formData: FormData) {
+  const profile = await requireProfile();
+  const lookups = await getAllLookups();
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = fuelOwnershipSchema.safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    redirect(`/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(error)}`);
+  }
+
+  const data = validated.data;
+  const vehicle = await getVehicle(data.vehicle_id, profile);
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
+
+  const supabase = requireAdminClient();
+  const { error } = await supabase.rpc("change_vehicle_fuel_ownership", {
+    p_vehicle_id: data.vehicle_id,
+    p_ownership: data.ownership,
+    p_from_date: data.from_date,
+    p_changed_by: profile.name,
+    p_remarks: data.remarks,
+  });
+
+  if (error) throw new Error("Fuel ownership update failed: " + error.message);
+
+  revalidatePath("/vehicles");
+  revalidatePath(`/vehicles/${data.vehicle_id}`);
+  redirect(`/vehicles/${data.vehicle_id}?fuel=1`);
 }
 
 export async function replaceDriverAssignmentAction(formData: FormData) {

@@ -1,13 +1,11 @@
-import { AlertTriangle, CarFront, CircleDot, ShieldCheck, UsersRound, Wrench } from "lucide-react";
+import { AlertTriangle, CarFront, ShieldCheck, Wrench } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 const icons = {
-  circles: CircleDot,
   vehicles: CarFront,
   active: ShieldCheck,
   issue: Wrench,
   alerts: AlertTriangle,
-  drivers: UsersRound,
 };
 
 export function SummaryCards({
@@ -23,16 +21,14 @@ export function SummaryCards({
   };
 }) {
   const items = [
-    { label: "Total Circles", value: summary.totalCircles, icon: "circles" as const },
     { label: "Total Vehicles", value: summary.totalVehicles, icon: "vehicles" as const },
     { label: "Active Vehicles", value: summary.activeVehicles, icon: "active" as const },
-    { label: "Maintenance / Breakdown", value: summary.maintenanceOrBreakdown, icon: "issue" as const },
+    { label: "Needs Attention", value: summary.maintenanceOrBreakdown, icon: "issue" as const },
     { label: "Docs Expiring", value: summary.expiringDocs, icon: "alerts" as const },
-    { label: "Active Drivers", value: summary.activeDrivers, icon: "drivers" as const },
   ];
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {items.map((item) => {
         const Icon = icons[item.icon];
         return (
@@ -52,4 +48,3 @@ export function SummaryCards({
     </div>
   );
 }
-

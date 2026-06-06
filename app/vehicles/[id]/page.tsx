@@ -5,9 +5,9 @@ import { LinkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { VehicleProfileTabs } from "@/components/vehicles/VehicleProfileTabs";
-import { changeVehicleStatusAction, replaceDriverAssignmentAction } from "@/lib/actions/vehicle-actions";
+import { changeFuelOwnershipAction, changeVehicleStatusAction, replaceDriverAssignmentAction } from "@/lib/actions/vehicle-actions";
 import { requireProfile } from "@/lib/auth";
-import { getDriverAssignments, getDrivers, getLookups, getStatusHistory, getVehicle, getVehicleTransfers } from "@/lib/data";
+import { getDriverAssignments, getDrivers, getFuelOwnershipHistory, getLookups, getStatusHistory, getVehicle, getVehicleTransfers } from "@/lib/data";
 import { canEditVehicle, canInitiateTransfer } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,11 @@ export default async function VehicleProfilePage({ params }: { params: { id: str
   const vehicle = await getVehicle(params.id, profile);
   if (!vehicle) notFound();
 
-  const [drivers, transfers, statusHistory, availableDrivers, lookups] = await Promise.all([
+  const [drivers, transfers, statusHistory, fuelOwnershipHistory, availableDrivers, lookups] = await Promise.all([
     getDriverAssignments(vehicle.vehicle_id, profile),
     getVehicleTransfers(vehicle.vehicle_id, profile),
     getStatusHistory(vehicle.vehicle_id, profile),
+    getFuelOwnershipHistory(vehicle.vehicle_id, profile),
     getDrivers(profile),
     getLookups(profile),
   ]);
@@ -29,7 +30,7 @@ export default async function VehicleProfilePage({ params }: { params: { id: str
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title={vehicle.registration_no} eyebrow={`${vehicle.current_circle ?? vehicle.home_circle} / ${vehicle.division ?? "Unassigned"} / ${vehicle.substation ?? "Unassigned"}`}>
+      <PageHeader title={vehicle.registration_no} eyebrow={`${vehicle.current_circle ?? vehicle.home_circle} / ${vehicle.division ?? "Unassigned"} / ${vehicle.substation ?? "Unassigned"}`} backHref="/vehicles">
         <StatusBadge status={vehicle.status} />
         {canManageVehicle ? (
           <LinkButton href={`/vehicles/${vehicle.vehicle_id}/edit`} variant="outline">
@@ -40,7 +41,7 @@ export default async function VehicleProfilePage({ params }: { params: { id: str
         {canTransfer ? (
           <LinkButton href={`/vehicles/${vehicle.vehicle_id}/transfer`}>
             <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            Transfer
+            Change Location
           </LinkButton>
         ) : null}
       </PageHeader>
@@ -49,10 +50,11 @@ export default async function VehicleProfilePage({ params }: { params: { id: str
         drivers={drivers}
         transfers={transfers}
         statusHistory={statusHistory}
+        fuelOwnershipHistory={fuelOwnershipHistory}
         availableDrivers={availableDrivers}
         canManage={canManageVehicle}
-        canTransfer={canTransfer}
         changeStatusAction={changeVehicleStatusAction}
+        changeFuelOwnershipAction={changeFuelOwnershipAction}
         replaceDriverAction={replaceDriverAssignmentAction}
       />
     </AppShell>

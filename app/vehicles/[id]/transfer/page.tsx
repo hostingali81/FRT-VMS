@@ -17,9 +17,9 @@ export default async function TransferVehiclePage({ params }: { params: { id: st
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Transfer Vehicle" eyebrow={vehicle.registration_no} />
+      <PageHeader title="Change Location" eyebrow={vehicle.registration_no} backHref={`/vehicles/${vehicle.vehicle_id}`} />
       <div className="px-4 py-5 sm:px-6 lg:px-8">
-        <TransferForm vehicle={vehicle} lookups={lookups} action={transferVehicleAction} />
+        <TransferForm vehicle={vehicle} lookups={lookups} action={transferVehicleAction} cancelHref={`/vehicles/${vehicle.vehicle_id}`} />
       </div>
     </AppShell>
   );

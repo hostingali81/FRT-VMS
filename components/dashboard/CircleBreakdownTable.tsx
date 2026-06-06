@@ -10,30 +10,28 @@ export function CircleBreakdownTable({ rows }: { rows: CircleSummary[] }) {
         <CardTitle>Circle-Wise Fleet</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto p-0">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+        <table className="min-w-[650px] w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
             <tr>
               <th className="px-5 py-3">Circle</th>
-              <th className="px-5 py-3 text-right">Total</th>
+              <th className="px-5 py-3 text-right">Vehicles</th>
               <th className="px-5 py-3 text-right">Active</th>
-              <th className="px-5 py-3 text-right">Maintenance</th>
-              <th className="px-5 py-3 text-right">Breakdown</th>
-              <th className="px-5 py-3 text-right">Expiring Docs</th>
+              <th className="px-5 py-3 text-right">Attention</th>
+              <th className="px-5 py-3 text-right">Docs</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {rows.map((row) => (
               <tr key={row.circle_id} className="hover:bg-slate-50">
-                <td className="px-5 py-4 font-medium text-slate-950">
+                <td data-label="Circle" className="px-5 py-4 font-medium text-slate-950">
                   <Link href={`/vehicles?circle=${row.circle_id}`} className="hover:underline">
                     {row.circle}
                   </Link>
                 </td>
-                <td className="px-5 py-4 text-right">{row.total}</td>
-                <td className="px-5 py-4 text-right text-emerald-700">{row.active}</td>
-                <td className="px-5 py-4 text-right text-amber-700">{row.maintenance}</td>
-                <td className="px-5 py-4 text-right text-red-700">{row.breakdown}</td>
-                <td className="px-5 py-4 text-right">
+                <td data-label="Vehicles" className="px-5 py-4 text-right">{row.total}</td>
+                <td data-label="Active" className="px-5 py-4 text-right text-emerald-700">{row.active}</td>
+                <td data-label="Attention" className="px-5 py-4 text-right text-red-700">{row.maintenance + row.breakdown}</td>
+                <td data-label="Documents" className="px-5 py-4 text-right">
                   <Badge tone={row.documents_expiring > 0 ? "yellow" : "green"}>{row.documents_expiring}</Badge>
                 </td>
               </tr>
@@ -44,4 +42,3 @@ export function CircleBreakdownTable({ rows }: { rows: CircleSummary[] }) {
     </Card>
   );
 }
-

@@ -1,9 +1,11 @@
+import { cache } from "react";
 import {
   buildCircleSummaries,
   buildDivisionSummaries,
   mockActivity,
   mockDriverAssignments,
   mockDrivers,
+  mockFuelOwnershipHistory,
   mockLookups,
   mockStatusHistory,
   mockTransfers,
@@ -21,6 +23,7 @@ import type {
   DriverAssignment,
   DriverRecord,
   FleetVehicle,
+  FuelOwnershipHistoryItem,
   LookupData,
   StatusHistoryItem,
   Substation,
@@ -40,12 +43,16 @@ async function selectRows<T>(view: string, fallback: T[], orderColumn?: string) 
   }
 
   const { data, error } = await query;
-  if (error || !data) return fallback;
+  if (error) {
+    console.error(`[data.ts] Query on "${view}" failed:`, error.message);
+    return fallback;
+  }
+  if (!data) return fallback;
 
   return data as T[];
 }
 
-export async function getAllLookups(): Promise<LookupData> {
+export const getAllLookups = cache(async (): Promise<LookupData> => {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return mockLookups;
 
@@ -64,20 +71,20 @@ export async function getAllLookups(): Promise<LookupData> {
     divisions: (divisions.data ?? []) as Division[],
     substations: (substations.data ?? []) as Substation[],
   };
-}
+});
 
 export async function getLookups(profile?: UserProfile | null): Promise<LookupData> {
   const lookups = await getAllLookups();
   return profile ? filterLookupsForProfile(lookups, profile) : lookups;
 }
 
-export async function getVehicles(profile?: UserProfile | null): Promise<FleetVehicle[]> {
+export const getVehicles = cache(async (profile?: UserProfile | null): Promise<FleetVehicle[]> => {
   const vehicles = await selectRows<FleetVehicle>("vehicle_current_view", mockVehicles, "registration_no");
   if (!profile) return vehicles;
 
   const lookups = await getAllLookups();
   return vehicles.filter((vehicle) => canSeeVehicle(profile, vehicle, lookups));
-}
+});
 
 export async function getVehicle(id: string, profile?: UserProfile | null) {
   const vehicles = await getVehicles(profile);
@@ -150,7 +157,7 @@ export async function getDivisionSummaries(profile?: UserProfile | null): Promis
   return buildDivisionSummaries(await getVehicles(profile));
 }
 
-export async function getTransfers(profile?: UserProfile | null): Promise<TransferRecord[]> {
+export const getTransfers = cache(async (profile?: UserProfile | null): Promise<TransferRecord[]> => {
   const transfers = await selectRows<TransferRecord>("transfer_history_view", mockTransfers, "transfer_date");
   if (!profile) return transfers;
 
@@ -165,7 +172,7 @@ export async function getTransfers(profile?: UserProfile | null): Promise<Transf
       (transfer.from_division_id ? divisionIds.has(transfer.from_division_id) : false) ||
       (transfer.to_division_id ? divisionIds.has(transfer.to_division_id) : false),
   );
-}
+});
 
 export async function getDrivers(profile?: UserProfile | null): Promise<DriverRecord[]> {
   const drivers = await selectRows<DriverRecord>("driver_current_view", mockDrivers, "name");
@@ -277,18 +284,52 @@ export async function getStatusHistory(vehicleId: string, profile?: UserProfile 
     if (!vehicle) return [];
   }
 
-  const rows = await selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date");
-  return rows.filter((row) => row.vehicle_id === vehicleId);
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockStatusHistory.filter((row) => row.vehicle_id === vehicleId);
+
+  const { data, error } = await supabase
+    .from("vehicle_status_history")
+    .select("*")
+    .eq("vehicle_id", vehicleId)
+    .order("from_date", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getStatusHistory failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as StatusHistoryItem[];
 }
 
-export async function getAllStatusHistory(profile?: UserProfile | null): Promise<StatusHistoryItem[]> {
+export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<FuelOwnershipHistoryItem[]> {
+  if (profile) {
+    const vehicle = await getVehicle(vehicleId, profile);
+    if (!vehicle) return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockFuelOwnershipHistory.filter((row) => row.vehicle_id === vehicleId);
+
+  const { data, error } = await supabase
+    .from("vehicle_fuel_ownership_history")
+    .select("*")
+    .eq("vehicle_id", vehicleId)
+    .order("from_date", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getFuelOwnershipHistory failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as FuelOwnershipHistoryItem[];
+}
+
+export const getAllStatusHistory = cache(async (profile?: UserProfile | null): Promise<StatusHistoryItem[]> => {
   const rows = await selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date");
   if (!profile) return rows;
 
   const vehicles = await getVehicles(profile);
   const visibleVehicleIds = new Set(vehicles.map((vehicle) => vehicle.vehicle_id));
   return rows.filter((row) => visibleVehicleIds.has(row.vehicle_id));
-}
+});
 
 export async function getVehicleTransfers(vehicleId: string, profile?: UserProfile | null): Promise<TransferRecord[]> {
   const transfers = await getTransfers(profile);

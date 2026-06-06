@@ -37,7 +37,7 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[900px] w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-3">Name</th>
@@ -52,17 +52,17 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
           <tbody className="divide-y divide-slate-100 bg-white">
             {drivers.map((driver) => (
               <tr key={`${driver.driver_id}-${driver.shift ?? "unassigned"}`}>
-                <td className="px-5 py-4 font-semibold text-slate-950">{driver.name}</td>
-                <td className="px-5 py-4 text-slate-600">{driver.mobile ?? "Not set"}</td>
-                <td className="px-5 py-4 text-slate-600">{driver.license_no ?? "Not set"}</td>
-                <td className="px-5 py-4">
+                <td data-label="Name" className="px-5 py-4 font-semibold text-slate-950">{driver.name}</td>
+                <td data-label="Mobile" className="px-5 py-4 text-slate-600">{driver.mobile ?? "Not set"}</td>
+                <td data-label="License" className="px-5 py-4 text-slate-600">{driver.license_no ?? "Not set"}</td>
+                <td data-label="Expiry" className="px-5 py-4">
                   <ExpiryBadge date={driver.license_expiry} />
                 </td>
-                <td className="px-5 py-4 text-slate-600">{driver.circle}</td>
-                <td className="px-5 py-4 text-slate-600">
+                <td data-label="Circle" className="px-5 py-4 text-slate-600">{driver.circle}</td>
+                <td data-label="Assigned Vehicle" className="px-5 py-4 text-slate-600">
                   {driver.registration_no ? `${driver.registration_no} (${titleCase(driver.shift)}) since ${formatDate(driver.assigned_from)}` : "Unassigned"}
                 </td>
-                <td className="px-5 py-4">
+                <td data-label="Status" className="px-5 py-4">
                   <Badge tone={driver.status === "active" ? "green" : "gray"}>{titleCase(driver.status)}</Badge>
                 </td>
               </tr>
@@ -73,4 +73,3 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
     </Card>
   );
 }
-

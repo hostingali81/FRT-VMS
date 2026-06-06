@@ -1,88 +1,173 @@
 "use client";
 
-import { Edit3, FileText, Fuel, MapPin, Phone, RefreshCcw, UserRound, Wrench } from "lucide-react";
-import { useState } from "react";
-import { Button, LinkButton } from "@/components/ui/button";
+import { ChevronDown, ChevronUp, Edit3 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { LinkButton } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { Timeline } from "@/components/shared/Timeline";
-import type { DriverAssignment, DriverRecord, FleetVehicle, StatusHistoryItem, TransferRecord } from "@/lib/types";
+import type { DriverAssignment, DriverRecord, FleetVehicle, FuelOwnershipHistoryItem, StatusHistoryItem, TransferRecord } from "@/lib/types";
 import { formatDate, titleCase } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
-const tabs = ["Overview", "Current Drivers", "Transfer History", "Status History", "Driver History", "Documents"];
+type QuickAction = "status" | "fuel" | null;
+type ShiftKey = "morning" | "evening" | "night";
+
+const TABS = ["Overview", "Drivers", "Transfers", "Status History", "Fuel History", "Driver History", "Documents"] as const;
+type TabName = (typeof TABS)[number];
 
 export function VehicleProfileTabs({
   vehicle,
   drivers,
   transfers,
   statusHistory,
+  fuelOwnershipHistory,
   availableDrivers,
   canManage,
-  canTransfer,
   changeStatusAction,
+  changeFuelOwnershipAction,
   replaceDriverAction,
 }: {
   vehicle: FleetVehicle;
   drivers: DriverAssignment[];
   transfers: TransferRecord[];
   statusHistory: StatusHistoryItem[];
+  fuelOwnershipHistory: FuelOwnershipHistoryItem[];
   availableDrivers: DriverRecord[];
   canManage: boolean;
-  canTransfer: boolean;
   changeStatusAction: (formData: FormData) => Promise<void>;
+  changeFuelOwnershipAction: (formData: FormData) => Promise<void>;
   replaceDriverAction: (formData: FormData) => Promise<void>;
 }) {
-  const [tab, setTab] = useState(tabs[0]);
-  const currentDrivers = drivers.filter((driver) => !driver.to_date);
-  const activeAvailableDrivers = availableDrivers.filter((driver) => driver.status === "active");
+  const [tab, setTab] = useState<TabName>("Overview");
+  const [openAction, setOpenAction] = useState<QuickAction>(null);
+  const [openShift, setOpenShift] = useState<ShiftKey | null>(null);
+
+  const currentDrivers = useMemo(() => drivers.filter((d) => !d.to_date), [drivers]);
+  const activeAvailableDrivers = useMemo(
+    () => availableDrivers.filter((d) => d.status === "active"),
+    [availableDrivers],
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto border-b border-slate-200 bg-white">
-        <div className="flex min-w-max gap-1 px-4 sm:px-6 lg:px-8">
-          {tabs.map((item) => (
+    <div>
+      {/* Mobile tab selector */}
+      <div className="border-b border-slate-200 bg-white px-4 md:hidden">
+        <Select
+          value={tab}
+          onChange={(e) => setTab(e.target.value as TabName)}
+          className="my-3"
+        >
+          {TABS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {/* Desktop tab bar */}
+      <div className="hidden overflow-x-auto border-b border-slate-200 bg-white md:block">
+        <div className="flex min-w-max px-4 sm:px-6 lg:px-8">
+          {TABS.map((t) => (
             <button
-              key={item}
+              key={t}
               type="button"
-              onClick={() => setTab(item)}
+              onClick={() => setTab(t)}
               className={cn(
-                "border-b-2 px-3 py-3 text-sm font-semibold",
-                item === tab ? "border-slate-950 text-slate-950" : "border-transparent text-slate-500 hover:text-slate-900",
+                "border-b-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors",
+                t === tab
+                  ? "border-slate-900 text-slate-900"
+                  : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700",
               )}
             >
-              {item}
+              {t}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="px-4 pb-8 sm:px-6 lg:px-8">
-        {tab === "Overview" ? (
-          <div className="grid gap-4 xl:grid-cols-[1fr_24rem]">
+      {/* Tab content */}
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
+
+        {/* ─── OVERVIEW ─── */}
+        {tab === "Overview" && (
+          <div className="grid gap-5 xl:grid-cols-[1fr_22rem]">
+
+            {/* Vehicle details */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle>Master Details</CardTitle>
-                  {canManage ? (
-                    <LinkButton href={`/vehicles/${vehicle.vehicle_id}/edit`} variant="outline" className="h-9">
-                      <Edit3 className="h-4 w-4" aria-hidden="true" />
+                <div className="flex items-center justify-between">
+                  <CardTitle>Vehicle Details</CardTitle>
+                  {canManage && (
+                    <LinkButton
+                      href={`/vehicles/${vehicle.vehicle_id}/edit`}
+                      variant="outline"
+                      className="h-8 gap-1.5 text-xs"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
                       Edit
                     </LinkButton>
-                  ) : null}
+                  )}
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <Info icon={<Fuel />} label="Type / Fuel" value={`${vehicle.vehicle_type ?? "Vehicle"} / ${vehicle.fuel_type ?? "Fuel not set"}`} />
-                <Info icon={<UserRound />} label="Owner" value={vehicle.owner_name ?? "Not set"} detail={vehicle.owner_mobile ?? undefined} />
-                <Info icon={<FileText />} label="Vendor" value={vehicle.vendor_name ?? "Not set"} />
-                <Info icon={<MapPin />} label="Current Location" value={`${vehicle.current_circle ?? vehicle.home_circle} / ${vehicle.division ?? "Unassigned"} / ${vehicle.substation ?? "Unassigned"}`} />
-                <Info icon={<Phone />} label="GPS" value={vehicle.gps_company ?? "Not set"} detail={vehicle.gps_device_id ?? undefined} />
-                <Info icon={<Wrench />} label="Status" value={titleCase(vehicle.status)} />
+              <CardContent>
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+                  <Field label="Type">{vehicle.vehicle_type ?? "—"}</Field>
+                  <Field label="Fuel Type">{vehicle.fuel_type ?? "—"}</Field>
+                  <Field label="Fuel Ownership">
+                    <span className={cn(
+                      "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold",
+                      vehicle.fuel_ownership === "vendor"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-blue-100 text-blue-800",
+                    )}>
+                      {vehicle.fuel_ownership === "vendor" ? "Vendor Fuel" : "Company Fuel"}
+                    </span>
+                  </Field>
+                  <Field label="Status">
+                    <span className={cn(
+                      "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold",
+                      vehicle.status === "active" ? "bg-emerald-100 text-emerald-800"
+                        : vehicle.status === "maintenance" ? "bg-yellow-100 text-yellow-800"
+                        : vehicle.status === "breakdown" ? "bg-red-100 text-red-800"
+                        : "bg-slate-100 text-slate-700",
+                    )}>
+                      {titleCase(vehicle.status)}
+                    </span>
+                  </Field>
+                  <Field label="Model Year">{vehicle.model_year ? String(vehicle.model_year) : "—"}</Field>
+                  <Field label="Owner">
+                    {vehicle.owner_name ?? "—"}
+                    {vehicle.owner_mobile && (
+                      <span className="block text-xs text-slate-400">{vehicle.owner_mobile}</span>
+                    )}
+                  </Field>
+                  <Field label="Vendor">{vehicle.vendor_name ?? "—"}</Field>
+                  <Field label="GPS Company">
+                    {vehicle.gps_company ?? "—"}
+                    {vehicle.gps_device_id && (
+                      <span className="block text-xs text-slate-400">{vehicle.gps_device_id}</span>
+                    )}
+                  </Field>
+                  <Field label="Location" className="col-span-2 sm:col-span-1">
+                    {vehicle.current_circle ?? vehicle.home_circle}
+                    <span className="block text-xs text-slate-400">
+                      {vehicle.division ?? "No division"} / {vehicle.substation ?? "No substation"}
+                    </span>
+                  </Field>
+                </dl>
               </CardContent>
             </Card>
+
+            {/* Right sidebar */}
             <div className="space-y-4">
+
+              {/* Documents */}
               <Card>
                 <CardHeader>
                   <CardTitle>Documents</CardTitle>
@@ -93,220 +178,341 @@ export function VehicleProfileTabs({
                   <ExpiryBadge label="Pollution" date={vehicle.pollution_expiry} />
                 </CardContent>
               </Card>
-              {canManage ? <StatusForm vehicleId={vehicle.vehicle_id} action={changeStatusAction} /> : null}
+
+              {/* Admin actions — accordion */}
+              {canManage && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 p-3">
+
+                    {/* Change Status accordion */}
+                    <div className="overflow-hidden rounded-md border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setOpenAction(openAction === "status" ? null : "status")}
+                        className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Change Status
+                        {openAction === "status" ? (
+                          <ChevronUp className="h-4 w-4 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-slate-400" />
+                        )}
+                      </button>
+                      {openAction === "status" && (
+                        <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                          <form action={changeStatusAction} className="space-y-3">
+                            <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
+                            <div className="space-y-1.5">
+                              <Label>New Status</Label>
+                              <Select name="status" required>
+                                <option value="active">Active</option>
+                                <option value="maintenance">Maintenance</option>
+                                <option value="breakdown">Breakdown</option>
+                                <option value="standby">Standby</option>
+                                <option value="removed">Removed</option>
+                                <option value="accident">Accident</option>
+                              </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Effective Date</Label>
+                              <Input name="from_date" type="date" defaultValue={today} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Remarks</Label>
+                              <Textarea name="remarks" />
+                            </div>
+                            <SubmitButton className="w-full">Save</SubmitButton>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Change Fuel Ownership accordion */}
+                    <div className="overflow-hidden rounded-md border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setOpenAction(openAction === "fuel" ? null : "fuel")}
+                        className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Change Fuel Ownership
+                        {openAction === "fuel" ? (
+                          <ChevronUp className="h-4 w-4 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-slate-400" />
+                        )}
+                      </button>
+                      {openAction === "fuel" && (
+                        <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                          <form action={changeFuelOwnershipAction} className="space-y-3">
+                            <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
+                            <div className="space-y-1.5">
+                              <Label>Ownership</Label>
+                              <Select name="ownership" defaultValue={vehicle.fuel_ownership} required>
+                                <option value="company">Company Fuel</option>
+                                <option value="vendor">Vendor Fuel</option>
+                              </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Effective Date</Label>
+                              <Input name="from_date" type="date" defaultValue={today} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Remarks</Label>
+                              <Textarea name="remarks" />
+                            </div>
+                            <SubmitButton className="w-full">Save</SubmitButton>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
-        ) : null}
+        )}
 
-        {tab === "Current Drivers" ? (
+        {/* ─── DRIVERS ─── */}
+        {tab === "Drivers" && (
           <div className="grid gap-4 md:grid-cols-3">
             {(["morning", "evening", "night"] as const).map((shift) => {
-              const driver = currentDrivers.find((item) => item.shift === shift);
+              const driver = currentDrivers.find((d) => d.shift === shift);
+              const isOpen = openShift === shift;
               return (
                 <Card key={shift}>
                   <CardHeader>
                     <CardTitle>{titleCase(shift)} Shift</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
+                  <CardContent className="space-y-4">
+                    {/* Driver info */}
                     {driver ? (
-                      <>
-                        <p className="text-lg font-semibold text-slate-950">{driver.driver_name}</p>
-                        <p className="text-slate-600">{driver.mobile ?? "Mobile not set"}</p>
-                        <p className="text-slate-600">{driver.license_no ?? "License not set"}</p>
-                        <p className="text-slate-500">Since {formatDate(driver.from_date)}</p>
-                      </>
+                      <div className="space-y-1">
+                        <p className="font-semibold text-slate-900">{driver.driver_name}</p>
+                        <p className="text-sm text-slate-500">{driver.mobile ?? "Mobile not set"}</p>
+                        <p className="text-sm text-slate-500">{driver.license_no ?? "License not set"}</p>
+                        <p className="text-xs text-slate-400">Since {formatDate(driver.from_date)}</p>
+                      </div>
                     ) : (
-                      <p className="text-slate-500">No active driver assigned.</p>
+                      <p className="text-sm italic text-slate-400">No driver assigned</p>
                     )}
-                    {canManage ? (
-                      <DriverReplaceForm
-                        vehicleId={vehicle.vehicle_id}
-                        shift={shift}
-                        drivers={activeAvailableDrivers}
-                        action={replaceDriverAction}
-                      />
-                    ) : null}
+
+                    {/* Toggle assign form */}
+                    {canManage && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setOpenShift(isOpen ? null : shift)}
+                          className={cn(
+                            "w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                            isOpen
+                              ? "border-slate-300 bg-slate-100 text-slate-600"
+                              : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                          )}
+                        >
+                          {isOpen ? "Cancel" : driver ? "Change Driver" : "Assign Driver"}
+                        </button>
+
+                        {isOpen && (
+                          <form action={replaceDriverAction} className="space-y-3 border-t border-slate-100 pt-3">
+                            <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
+                            <input type="hidden" name="shift" value={shift} />
+                            <div className="space-y-1.5">
+                              <Label>Select Driver</Label>
+                              <Select name="driver_id" required>
+                                <option value="">Choose driver</option>
+                                {activeAvailableDrivers.map((d) => (
+                                  <option key={d.driver_id} value={d.driver_id}>
+                                    {d.name}
+                                    {d.mobile ? ` (${d.mobile})` : ""}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>From Date</Label>
+                              <Input name="from_date" type="date" defaultValue={today} />
+                            </div>
+                            <Input name="remarks" placeholder="Remarks (optional)" />
+                            <SubmitButton variant="secondary" className="w-full">
+                              Confirm
+                            </SubmitButton>
+                          </form>
+                        )}
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               );
             })}
           </div>
-        ) : null}
+        )}
 
-        {tab === "Transfer History" ? (
+        {/* ─── TRANSFERS ─── */}
+        {tab === "Transfers" && (
           <Card>
-            <CardContent>
-              <Timeline
-                items={transfers.map((transfer) => ({
-                  id: transfer.id,
-                  date: transfer.transfer_date,
-                  title: `${transfer.from_substation ?? "Unassigned"} to ${transfer.to_substation ?? "Unassigned"}`,
-                  description: `${transfer.from_circle ?? "No circle"} / ${transfer.from_division ?? "No division"} to ${transfer.to_circle ?? "No circle"} / ${transfer.to_division ?? "No division"} by ${transfer.approved_by ?? "Not recorded"}`,
-                  badge: transfer.is_cross_circle ? "Cross-circle" : transfer.reason ?? undefined,
-                }))}
-              />
+            <CardContent className="pt-6">
+              {transfers.length === 0 ? (
+                <EmptyState message="No transfers recorded yet" />
+              ) : (
+                <Timeline
+                  items={transfers.map((t) => ({
+                    id: t.id,
+                    date: t.transfer_date,
+                    title: `${t.from_circle ?? "—"} / ${t.from_division ?? "Unassigned"} → ${t.to_circle ?? "—"} / ${t.to_division ?? "Unassigned"}`,
+                    description: [
+                      t.from_substation && t.to_substation ? `${t.from_substation} → ${t.to_substation}` : null,
+                      t.approved_by ? `Approved by ${t.approved_by}` : null,
+                      t.remarks ?? null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                    badge: t.is_cross_circle ? "Cross-circle" : (t.reason ?? undefined),
+                  }))}
+                />
+              )}
             </CardContent>
           </Card>
-        ) : null}
+        )}
 
-        {tab === "Status History" ? (
+        {/* ─── STATUS HISTORY ─── */}
+        {tab === "Status History" && (
           <Card>
-            <CardContent>
-              <Timeline
-                items={statusHistory.map((item) => ({
-                  id: item.id,
-                  date: item.from_date,
-                  title: titleCase(item.status),
-                  description: `${item.remarks ?? "No remarks"}${item.to_date ? ` until ${formatDate(item.to_date)}` : ""}`,
-                  badge: item.recorded_by ?? undefined,
-                }))}
-              />
+            <CardContent className="pt-6">
+              {statusHistory.length === 0 ? (
+                <EmptyState message="No status changes recorded yet" />
+              ) : (
+                <Timeline
+                  items={statusHistory.map((item) => ({
+                    id: item.id,
+                    date: item.from_date,
+                    title: titleCase(item.status),
+                    description: [
+                      item.remarks ?? "No remarks",
+                      item.to_date ? `Until ${formatDate(item.to_date)}` : "Current",
+                    ].join(" · "),
+                    badge: item.recorded_by ?? undefined,
+                  }))}
+                />
+              )}
             </CardContent>
           </Card>
-        ) : null}
+        )}
 
-        {tab === "Driver History" ? (
+        {/* ─── FUEL HISTORY ─── */}
+        {tab === "Fuel History" && (
+          <Card>
+            <CardContent className="pt-6">
+              {fuelOwnershipHistory.length === 0 ? (
+                <EmptyState message="No fuel ownership changes recorded yet" />
+              ) : (
+                <Timeline
+                  items={fuelOwnershipHistory.map((item) => ({
+                    id: item.id,
+                    date: item.from_date,
+                    title: item.ownership === "vendor" ? "Vendor Fuel" : "Company Fuel",
+                    description: [
+                      item.remarks ?? "No remarks",
+                      item.to_date ? `Until ${formatDate(item.to_date)}` : "Current",
+                    ].join(" · "),
+                    badge: item.changed_by ?? undefined,
+                  }))}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ─── DRIVER HISTORY ─── */}
+        {tab === "Driver History" && (
           <Card className="overflow-hidden">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">Driver</th>
-                  <th className="px-5 py-3">Shift</th>
-                  <th className="px-5 py-3">From</th>
-                  <th className="px-5 py-3">To</th>
-                  <th className="px-5 py-3">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {drivers.map((driver) => (
-                  <tr key={driver.id}>
-                    <td className="px-5 py-4 font-medium text-slate-950">{driver.driver_name}</td>
-                    <td className="px-5 py-4">{titleCase(driver.shift)}</td>
-                    <td className="px-5 py-4">{formatDate(driver.from_date)}</td>
-                    <td className="px-5 py-4">{driver.to_date ? formatDate(driver.to_date) : "Current"}</td>
-                    <td className="px-5 py-4 text-slate-600">{driver.remarks ?? "None"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {drivers.length === 0 ? (
+              <CardContent className="py-8">
+                <EmptyState message="No driver history available" />
+              </CardContent>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Driver</th>
+                      <th className="px-5 py-3">Shift</th>
+                      <th className="px-5 py-3">From</th>
+                      <th className="px-5 py-3">To</th>
+                      <th className="px-5 py-3">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {drivers.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <td className="px-5 py-3.5 font-medium text-slate-900">{d.driver_name}</td>
+                        <td className="px-5 py-3.5 text-slate-600">{titleCase(d.shift)}</td>
+                        <td className="px-5 py-3.5 text-slate-600">{formatDate(d.from_date)}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {d.to_date ? (
+                            formatDate(d.to_date)
+                          ) : (
+                            <span className="font-medium text-emerald-600">Current</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500">{d.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
-        ) : null}
+        )}
 
-        {tab === "Documents" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Compliance</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
-              <ExpiryBadge label="Insurance" date={vehicle.insurance_expiry} />
-              <ExpiryBadge label="Fitness" date={vehicle.fitness_expiry} />
-              <ExpiryBadge label="Pollution" date={vehicle.pollution_expiry} />
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {canTransfer ? (
-            <LinkButton href={`/vehicles/${vehicle.vehicle_id}/transfer`} variant="primary">
-              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-              Transfer Vehicle
-            </LinkButton>
-          ) : null}
-          <LinkButton href="/vehicles" variant="outline">
-            Back to Vehicles
-          </LinkButton>
-        </div>
+        {/* ─── DOCUMENTS ─── */}
+        {tab === "Documents" && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(
+              [
+                { label: "Insurance", date: vehicle.insurance_expiry },
+                { label: "Fitness Certificate", date: vehicle.fitness_expiry },
+                { label: "Pollution Control", date: vehicle.pollution_expiry },
+              ] as const
+            ).map((doc) => (
+              <Card key={doc.label}>
+                <CardHeader>
+                  <CardTitle className="text-sm">{doc.label}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ExpiryBadge label={doc.label} date={doc.date} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function StatusForm({ vehicleId, action }: { vehicleId: string; action: (formData: FormData) => Promise<void> }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Change Status</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={action} className="space-y-3">
-          <input type="hidden" name="vehicle_id" value={vehicleId} />
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select name="status" required>
-              <option value="active">Active</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="breakdown">Breakdown</option>
-              <option value="standby">Standby</option>
-              <option value="removed">Removed</option>
-              <option value="accident">Accident</option>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>From Date</Label>
-            <Input name="from_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Remarks</Label>
-            <Textarea name="remarks" />
-          </div>
-          <Button type="submit" className="w-full">Update Status</Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DriverReplaceForm({
-  vehicleId,
-  shift,
-  drivers,
-  action,
-}: {
-  vehicleId: string;
-  shift: string;
-  drivers: DriverRecord[];
-  action: (formData: FormData) => Promise<void>;
-}) {
-  return (
-    <form action={action} className="space-y-2 border-t border-slate-200 pt-3">
-      <input type="hidden" name="vehicle_id" value={vehicleId} />
-      <input type="hidden" name="shift" value={shift} />
-      <Select name="driver_id" required>
-        <option value="">Change driver</option>
-        {drivers.map((driver) => (
-          <option key={driver.driver_id} value={driver.driver_id}>
-            {driver.name} {driver.mobile ? `(${driver.mobile})` : ""}
-          </option>
-        ))}
-      </Select>
-      <Input name="from_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
-      <Input name="remarks" placeholder="Remarks" />
-      <Button type="submit" variant="secondary" className="w-full">Assign</Button>
-    </form>
-  );
-}
-
-function Info({
-  icon,
+function Field({
   label,
-  value,
-  detail,
+  children,
+  className,
 }: {
-  icon: React.ReactNode;
   label: string;
-  value: string;
-  detail?: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex gap-3 rounded-md border border-slate-200 p-3">
-      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
-        <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>
-      </span>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-        <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
-        {detail ? <p className="mt-0.5 text-sm text-slate-500">{detail}</p> : null}
-      </div>
+    <div className={cn("space-y-1", className)}>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="text-sm font-medium text-slate-800">{children}</dd>
     </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <p className="py-8 text-center text-sm text-slate-400">{message}</p>
   );
 }

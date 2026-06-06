@@ -17,7 +17,7 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
   return (
     <ol className="space-y-4">
       {items.map((item) => (
-        <li key={item.id} className="grid grid-cols-[8rem_1fr] gap-4">
+        <li key={item.id} className="grid gap-2 sm:grid-cols-[8rem_1fr] sm:gap-4">
           <time className="text-sm font-medium text-slate-500">{formatDate(item.date)}</time>
           <div className="relative border-l border-slate-200 pl-5">
             <span className="absolute -left-1.5 top-1.5 h-3 w-3 rounded-full bg-slate-950" />
@@ -32,4 +32,3 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
     </ol>
   );
 }
-

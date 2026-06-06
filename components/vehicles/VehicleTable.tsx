@@ -1,9 +1,8 @@
 "use client";
 
-import { Download, Edit3, Eye, Filter, Plus } from "lucide-react";
+import { Download, Edit3, Filter, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { LinkButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/form";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
@@ -15,13 +14,15 @@ import { getWorstDocumentState } from "@/lib/utils/expiry";
 export function VehicleTable({
   vehicles,
   lookups,
-  canCreate = false,
   canUpdate = false,
+  editableVehicleIds,
+  transferableVehicleIds,
 }: {
   vehicles: FleetVehicle[];
   lookups: LookupData;
-  canCreate?: boolean;
   canUpdate?: boolean;
+  editableVehicleIds?: string[];
+  transferableVehicleIds?: string[];
 }) {
   const [circleId, setCircleId] = useState("");
   const [divisionId, setDivisionId] = useState("");
@@ -43,6 +44,8 @@ export function VehicleTable({
     () => Array.from(new Set(vehicles.map((vehicle) => vehicle.vendor_name).filter(Boolean))).sort() as string[],
     [vehicles],
   );
+  const editableIds = useMemo(() => new Set(editableVehicleIds ?? []), [editableVehicleIds]);
+  const transferableIds = useMemo(() => new Set(transferableVehicleIds ?? []), [transferableVehicleIds]);
 
   const filtered = useMemo(
     () =>
@@ -122,9 +125,9 @@ export function VehicleTable({
           ))}
         </Select>
       </div>
-      <div className="flex flex-wrap justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">{filtered.length} vehicles visible</p>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex">
           <button
             type="button"
             className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
@@ -146,16 +149,10 @@ export function VehicleTable({
             <Download className="h-4 w-4" aria-hidden="true" />
             Export
           </button>
-          {canCreate ? (
-            <LinkButton href="/vehicles/new" variant="primary" className="h-9">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add Vehicle
-            </LinkButton>
-          ) : null}
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1180px] w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-3">Reg No</th>
@@ -181,42 +178,45 @@ export function VehicleTable({
 
               return (
                 <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
-                  <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-950">
+                  <td data-label="Registration No" className="whitespace-nowrap px-5 py-4 font-semibold text-slate-950">
                     <Link href={`/vehicles/${vehicle.vehicle_id}`} className="hover:underline">
                       {vehicle.registration_no}
                     </Link>
                   </td>
-                  <td className="px-5 py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
-                  <td className="px-5 py-4 text-slate-600">{vehicle.current_circle ?? vehicle.home_circle}</td>
-                  <td className="px-5 py-4 text-slate-600">{vehicle.division ?? "Unassigned"}</td>
-                  <td className="px-5 py-4 text-slate-600">{vehicle.substation ?? "Unassigned"}</td>
-                  <td className="px-5 py-4">
+                  <td data-label="Type" className="px-5 py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
+                  <td data-label="Circle" className="px-5 py-4 text-slate-600">{vehicle.current_circle ?? vehicle.home_circle}</td>
+                  <td data-label="Division" className="px-5 py-4 text-slate-600">{vehicle.division ?? "Unassigned"}</td>
+                  <td data-label="Substation" className="px-5 py-4 text-slate-600">{vehicle.substation ?? "Unassigned"}</td>
+                  <td data-label="Status" className="px-5 py-4">
                     <StatusBadge status={vehicle.status} />
                   </td>
-                  <td className="px-5 py-4 text-slate-600">{vehicle.gps_device_id ?? "Not set"}</td>
-                  <td className="px-5 py-4">
+                  <td data-label="GPS" className="px-5 py-4 text-slate-600">{vehicle.gps_device_id ?? "Not set"}</td>
+                  <td data-label="Document Status" className="px-5 py-4">
                     <ExpiryBadge date={date} />
                   </td>
-                  <td className="px-5 py-4 text-right">
-                    {canUpdate ? (
-                      <Link
-                        href={`/vehicles/${vehicle.vehicle_id}/edit`}
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                        title="Update vehicle"
-                      >
-                        <Edit3 className="h-4 w-4" aria-hidden="true" />
-                        Update
-                      </Link>
-                    ) : (
-                      <Link
-                        href={`/vehicles/${vehicle.vehicle_id}`}
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                        title="View vehicle"
-                      >
-                        <Eye className="h-4 w-4" aria-hidden="true" />
-                        View
-                      </Link>
-                    )}
+                  <td data-label="Action" className="px-5 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      {canUpdate || editableIds.has(vehicle.vehicle_id) ? (
+                        <Link
+                          href={`/vehicles/${vehicle.vehicle_id}/edit`}
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                          title="Vehicle update"
+                        >
+                          <Edit3 className="h-4 w-4" aria-hidden="true" />
+                          Vehicle Update
+                        </Link>
+                      ) : null}
+                      {transferableIds.has(vehicle.vehicle_id) ? (
+                        <Link
+                          href={`/vehicles/${vehicle.vehicle_id}/transfer`}
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-950 bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800"
+                          title="Change location"
+                        >
+                          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+                          Change Location
+                        </Link>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );

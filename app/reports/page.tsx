@@ -1,21 +1,11 @@
-import { Download } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ReportExportButtons } from "@/components/reports/ReportExportButtons";
 import { requireProfile } from "@/lib/auth";
 import { getCircleSummaries, getTransfers, getVehicles } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
-
-const reports = [
-  "Circle-wise Deployment Summary",
-  "Vehicle Movement Report",
-  "Cross-Circle Transfer Report",
-  "Driver Duty Report",
-  "Document Compliance Report",
-  "Vendor Fleet Report",
-  "Division-wise Active Fleet",
-];
 
 export default async function ReportsPage() {
   const profile = await requireProfile();
@@ -29,13 +19,8 @@ export default async function ReportsPage() {
           <CardHeader>
             <CardTitle>Report Library</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {reports.map((report) => (
-              <button key={report} className="flex w-full items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50">
-                {report}
-                <Download className="h-4 w-4" aria-hidden="true" />
-              </button>
-            ))}
+          <CardContent>
+            <ReportExportButtons circles={circles} transfers={transfers} vehicles={vehicles} />
           </CardContent>
         </Card>
         <div className="space-y-4">
@@ -44,7 +29,7 @@ export default async function ReportsPage() {
               <CardTitle>Circle-Wise Deployment Summary</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto p-0">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <table className="min-w-[650px] w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-5 py-3">Circle</th>
@@ -57,11 +42,11 @@ export default async function ReportsPage() {
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {circles.map((circle) => (
                     <tr key={circle.circle_id}>
-                      <td className="px-5 py-4 font-semibold text-slate-950">{circle.circle}</td>
-                      <td className="px-5 py-4 text-right">{circle.total}</td>
-                      <td className="px-5 py-4 text-right">{circle.active}</td>
-                      <td className="px-5 py-4 text-right">{circle.maintenance + circle.breakdown}</td>
-                      <td className="px-5 py-4 text-right">{circle.documents_expiring}</td>
+                      <td data-label="Circle" className="px-5 py-4 font-semibold text-slate-950">{circle.circle}</td>
+                      <td data-label="Total" className="px-5 py-4 text-right">{circle.total}</td>
+                      <td data-label="Active" className="px-5 py-4 text-right">{circle.active}</td>
+                      <td data-label="Issues" className="px-5 py-4 text-right">{circle.maintenance + circle.breakdown}</td>
+                      <td data-label="Documents" className="px-5 py-4 text-right">{circle.documents_expiring}</td>
                     </tr>
                   ))}
                 </tbody>

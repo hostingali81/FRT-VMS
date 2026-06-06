@@ -17,9 +17,9 @@ export default async function EditVehiclePage({ params }: { params: { id: string
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Edit Vehicle" eyebrow={vehicle.registration_no} />
+      <PageHeader title="Edit Vehicle" eyebrow={vehicle.registration_no} backHref={`/vehicles/${vehicle.vehicle_id}`} />
       <div className="px-4 py-5 sm:px-6 lg:px-8">
-        <VehicleForm lookups={lookups} vehicle={vehicle} action={updateVehicleAction} submitLabel="Update Vehicle" />
+        <VehicleForm lookups={lookups} vehicle={vehicle} action={updateVehicleAction} submitLabel="Update Vehicle" cancelHref={`/vehicles/${vehicle.vehicle_id}`} />
       </div>
     </AppShell>
   );

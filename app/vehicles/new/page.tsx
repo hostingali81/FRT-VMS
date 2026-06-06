@@ -16,9 +16,9 @@ export default async function NewVehiclePage() {
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Add Vehicle" eyebrow="Vehicle master" />
+      <PageHeader title="Add Vehicle" eyebrow="Vehicle master" backHref="/vehicles" />
       <div className="px-4 py-5 sm:px-6 lg:px-8">
-        <VehicleForm lookups={lookups} action={createVehicleAction} />
+        <VehicleForm lookups={lookups} action={createVehicleAction} cancelHref="/vehicles" />
       </div>
     </AppShell>
   );

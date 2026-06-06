@@ -2,7 +2,8 @@
 
 import { Save } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { LinkButton } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import type { FleetVehicle, LookupData } from "@/lib/types";
@@ -12,11 +13,13 @@ export function VehicleForm({
   action,
   vehicle,
   submitLabel = "Save Vehicle",
+  cancelHref,
 }: {
   lookups: LookupData;
   action: (formData: FormData) => Promise<void>;
   vehicle?: FleetVehicle;
   submitLabel?: string;
+  cancelHref?: string;
 }) {
   const [circleId, setCircleId] = useState(vehicle?.home_circle_id ?? lookups.circles[0]?.id ?? "");
   const [divisionId, setDivisionId] = useState(vehicle?.division_id ?? "");
@@ -53,6 +56,14 @@ export function VehicleForm({
               <option>EV</option>
             </Select>
           </Field>
+          {!vehicle ? (
+            <Field label="Fuel Ownership">
+              <Select name="fuel_ownership" defaultValue="company">
+                <option value="company">Company Fuel</option>
+                <option value="vendor">Vendor Fuel</option>
+              </Select>
+            </Field>
+          ) : null}
           <Field label="Model Year">
             <Input name="model_year" type="number" min="1990" max="2035" placeholder="2023" defaultValue={vehicle?.model_year ?? ""} />
           </Field>
@@ -149,10 +160,17 @@ export function VehicleForm({
             <Field label="Assigned By">
               <Input name="assigned_by" placeholder="Name / role" />
             </Field>
-            <Button type="submit" className="w-full">
-              <Save className="h-4 w-4" aria-hidden="true" />
-              {submitLabel}
-            </Button>
+            <div className="grid gap-2">
+              <SubmitButton className="w-full">
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {submitLabel}
+              </SubmitButton>
+              {cancelHref ? (
+                <LinkButton href={cancelHref} variant="outline" className="w-full justify-center">
+                  Cancel
+                </LinkButton>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -167,11 +185,18 @@ export function VehicleForm({
                 {vehicle.current_circle ?? vehicle.home_circle} / {vehicle.division ?? "Unassigned"} / {vehicle.substation ?? "Unassigned"}
               </p>
             </div>
-            <p className="text-slate-500">Use Transfer Vehicle to change circle, division, or substation.</p>
-            <Button type="submit" className="w-full">
-              <Save className="h-4 w-4" aria-hidden="true" />
-              {submitLabel}
-            </Button>
+            <p className="text-slate-500">Use Change Location to change circle, division, or substation.</p>
+            <div className="grid gap-2">
+              <SubmitButton className="w-full">
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {submitLabel}
+              </SubmitButton>
+              {cancelHref ? (
+                <LinkButton href={cancelHref} variant="outline" className="w-full justify-center">
+                  Cancel
+                </LinkButton>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -187,4 +212,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-

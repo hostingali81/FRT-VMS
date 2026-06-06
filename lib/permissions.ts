@@ -1,14 +1,8 @@
 import type { Circle, Division, FleetVehicle, LookupData, UserProfile, UserRole } from "@/lib/types";
 
 export function accessibleCircleIds(profile: UserProfile, lookups: LookupData) {
-  if (profile.role === "super_admin") return new Set(lookups.circles.map((circle) => circle.id));
-
-  if (profile.role === "zonal_manager") {
-    return new Set(
-      lookups.circles
-        .filter((circle) => circle.zone_id && circle.zone_id === profile.zone_id)
-        .map((circle) => circle.id),
-    );
+  if (profile.role === "super_admin" || profile.role === "zonal_manager") {
+    return new Set(lookups.circles.map((circle) => circle.id));
   }
 
   return new Set(profile.circle_id ? [profile.circle_id] : []);

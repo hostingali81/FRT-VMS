@@ -3,7 +3,8 @@
 import { AlertTriangle, Send } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { LinkButton } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import type { FleetVehicle, LookupData } from "@/lib/types";
@@ -13,10 +14,12 @@ export function TransferForm({
   vehicle,
   lookups,
   action,
+  cancelHref,
 }: {
   vehicle: FleetVehicle;
   lookups: LookupData;
   action: (formData: FormData) => Promise<void>;
+  cancelHref?: string;
 }) {
   const [circleId, setCircleId] = useState(vehicle.current_circle_id ?? lookups.circles[0]?.id ?? "");
   const [divisionId, setDivisionId] = useState(vehicle.division_id ?? "");
@@ -119,12 +122,19 @@ export function TransferForm({
               <Textarea name="remarks" />
             </Field>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 md:col-span-2">
+          <div className="grid gap-3 md:col-span-2 md:flex md:flex-wrap md:items-center md:justify-between">
             {isCrossCircle ? <Badge tone="indigo">Cross-circle</Badge> : <Badge tone="blue">Same circle</Badge>}
-            <Button type="submit">
-              <Send className="h-4 w-4" aria-hidden="true" />
-              Submit Transfer
-            </Button>
+            <div className="flex w-full gap-2 md:w-auto">
+              {cancelHref ? (
+                <LinkButton href={cancelHref} variant="outline" className="flex-1 justify-center md:flex-none">
+                  Cancel
+                </LinkButton>
+              ) : null}
+              <SubmitButton className="flex-1 md:flex-none">
+                <Send className="h-4 w-4" aria-hidden="true" />
+                Save Location
+              </SubmitButton>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -149,4 +159,3 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

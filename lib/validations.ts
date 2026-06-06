@@ -4,6 +4,7 @@ export const vehicleSchema = z.object({
   registration_no: z.string().min(4, "Registration number is too short").max(15).toUpperCase(),
   vehicle_type: z.string().min(1, "Vehicle type is required"),
   fuel_type: z.enum(["Diesel", "Petrol", "CNG", "EV"]),
+  fuel_ownership: z.enum(["company", "vendor"]).default("company"),
   model_year: z.coerce.number().min(1990).max(2035).optional().nullable(),
   owner_name: z.string().optional().nullable(),
   owner_mobile: z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").optional().nullable().or(z.literal("")),
@@ -44,4 +45,11 @@ export const driverSchema = z.object({
   address: z.string().optional().nullable(),
   circle_id: z.string().uuid("Invalid circle"),
   status: z.enum(['active', 'inactive']).default('active'),
+});
+
+export const fuelOwnershipSchema = z.object({
+  vehicle_id: z.string().uuid(),
+  ownership: z.enum(["company", "vendor"]),
+  from_date: z.string().min(1, "Date is required"),
+  remarks: z.string().optional().nullable(),
 });

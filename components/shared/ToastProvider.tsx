@@ -14,6 +14,12 @@ export function ToastProvider() {
     const transferred = searchParams.get("transferred");
     const status = searchParams.get("status");
     const driver = searchParams.get("driver");
+    const fuel = searchParams.get("fuel");
+    const user = searchParams.get("user");
+    const zone = searchParams.get("zone");
+    const circle = searchParams.get("circle");
+    const division = searchParams.get("division");
+    const substation = searchParams.get("substation");
 
     if (error) toast.error(decodeURIComponent(error));
     if (updated) toast.success("Updated successfully");
@@ -21,8 +27,13 @@ export function ToastProvider() {
     if (transferred) toast.success("Vehicle transferred successfully");
     if (status) toast.success("Status updated successfully");
     if (driver) toast.success("Driver assigned successfully");
-
-    // Clear params from URL without reload would be better, but for now this works
+    if (fuel) toast.success("Fuel ownership updated successfully");
+    if (user === "created") toast.success("User created successfully");
+    if (user === "updated") toast.success("User updated successfully");
+    if (zone === "created") toast.success("Zone created successfully");
+    if (circle === "created") toast.success("Circle created successfully");
+    if (division === "created") toast.success("Division created successfully");
+    if (substation === "created") toast.success("Substation created successfully");
   }, [searchParams]);
 
   return <Toaster position="top-right" richColors />;

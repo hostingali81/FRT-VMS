@@ -1,0 +1,119 @@
+"use client";
+
+import { Plus, UserPlus, X } from "lucide-react";
+import { useState } from "react";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input, Label, Select } from "@/components/ui/form";
+import { ROLE_LABELS } from "@/lib/types";
+import type { LookupData, UserRole } from "@/lib/types";
+
+export function CreateUserPanel({
+  lookups,
+  action,
+}: {
+  lookups: LookupData;
+  action: (formData: FormData) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-3 text-sm font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+      >
+        <Plus className="h-4 w-4" />
+        Create New User
+      </button>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <CardTitle>Create User</CardTitle>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <form action={action} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Name">
+            <Input name="name" required />
+          </Field>
+          <Field label="Email">
+            <Input name="email" type="email" required />
+          </Field>
+          <Field label="Temporary Password">
+            <Input name="password" type="password" required minLength={12} />
+          </Field>
+          <Field label="Role">
+            <Select name="role" defaultValue="viewer" required>
+              {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Zone">
+            <Select name="zone_id">
+              <option value="">No zone</option>
+              {(lookups.zones ?? []).map((zone) => (
+                <option key={zone.id} value={zone.id}>
+                  {zone.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Circle">
+            <Select name="circle_id">
+              <option value="">No circle</option>
+              {lookups.circles.map((circle) => (
+                <option key={circle.id} value={circle.id}>
+                  {circle.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Division">
+            <Select name="division_id">
+              <option value="">No division</option>
+              {lookups.divisions.map((division) => (
+                <option key={division.id} value={division.id}>
+                  {division.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex items-end">
+            <SubmitButton className="w-full">Create User</SubmitButton>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
