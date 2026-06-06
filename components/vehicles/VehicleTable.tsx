@@ -1,10 +1,10 @@
 "use client";
 
-import { Download, Edit3, Filter, RefreshCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Edit3, Filter, RefreshCcw, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Select } from "@/components/ui/form";
+import { Input, Select } from "@/components/ui/form";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { FleetVehicle, LookupData } from "@/lib/types";
@@ -24,11 +24,15 @@ export function VehicleTable({
   editableVehicleIds?: string[];
   transferableVehicleIds?: string[];
 }) {
+  const [search, setSearch] = useState("");
   const [circleId, setCircleId] = useState("");
   const [divisionId, setDivisionId] = useState("");
   const [substationId, setSubstationId] = useState("");
   const [status, setStatus] = useState("");
   const [vendor, setVendor] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const activeFilterCount = [circleId, divisionId, substationId, status, vendor].filter(Boolean).length;
 
   const divisions = useMemo(
     () => lookups.divisions.filter((division) => !circleId || division.circle_id === circleId),
@@ -47,83 +51,156 @@ export function VehicleTable({
   const editableIds = useMemo(() => new Set(editableVehicleIds ?? []), [editableVehicleIds]);
   const transferableIds = useMemo(() => new Set(transferableVehicleIds ?? []), [transferableVehicleIds]);
 
-  const filtered = useMemo(
-    () =>
-      vehicles.filter((vehicle) => {
-        return (
-          (!circleId || vehicle.current_circle_id === circleId || vehicle.home_circle_id === circleId) &&
-          (!divisionId || vehicle.division_id === divisionId) &&
-          (!substationId || vehicle.substation_id === substationId) &&
-          (!status || vehicle.status === status) &&
-          (!vendor || vehicle.vendor_name === vendor)
-        );
-      }),
-    [circleId, divisionId, status, substationId, vehicles, vendor],
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return vehicles.filter((vehicle) => {
+      const matchesSearch =
+        !q ||
+        vehicle.registration_no?.toLowerCase().includes(q) ||
+        vehicle.vehicle_type?.toLowerCase().includes(q) ||
+        vehicle.vendor_name?.toLowerCase().includes(q) ||
+        vehicle.current_circle?.toLowerCase().includes(q) ||
+        vehicle.division?.toLowerCase().includes(q) ||
+        vehicle.substation?.toLowerCase().includes(q);
+      return (
+        matchesSearch &&
+        (!circleId || vehicle.current_circle_id === circleId || vehicle.home_circle_id === circleId) &&
+        (!divisionId || vehicle.division_id === divisionId) &&
+        (!substationId || vehicle.substation_id === substationId) &&
+        (!status || vehicle.status === status) &&
+        (!vendor || vehicle.vendor_name === vendor)
+      );
+    });
+  }, [search, circleId, divisionId, status, substationId, vehicles, vendor]);
+
+  const filterSelects = (
+    <>
+      <Select
+        value={circleId}
+        onChange={(event) => {
+          setCircleId(event.target.value);
+          setDivisionId("");
+          setSubstationId("");
+        }}
+        aria-label="Circle"
+      >
+        <option value="">All circles</option>
+        {lookups.circles.map((circle) => (
+          <option key={circle.id} value={circle.id}>
+            {circle.name}
+          </option>
+        ))}
+      </Select>
+      <Select
+        value={divisionId}
+        onChange={(event) => {
+          setDivisionId(event.target.value);
+          setSubstationId("");
+        }}
+        aria-label="Division"
+      >
+        <option value="">All divisions</option>
+        {divisions.map((division) => (
+          <option key={division.id} value={division.id}>
+            {division.name}
+          </option>
+        ))}
+      </Select>
+      <Select value={substationId} onChange={(event) => setSubstationId(event.target.value)} aria-label="Substation">
+        <option value="">All substations</option>
+        {substations.map((substation) => (
+          <option key={substation.id} value={substation.id}>
+            {substation.name}
+          </option>
+        ))}
+      </Select>
+      <Select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Status">
+        <option value="">All status</option>
+        <option value="active">Active</option>
+        <option value="maintenance">Maintenance</option>
+        <option value="breakdown">Breakdown</option>
+        <option value="standby">Standby</option>
+        <option value="removed">Removed</option>
+        <option value="accident">Accident</option>
+      </Select>
+      <Select value={vendor} onChange={(event) => setVendor(event.target.value)} aria-label="Vendor">
+        <option value="">All vendors</option>
+        {vendors.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </Select>
+    </>
   );
 
   return (
     <Card className="overflow-hidden">
-      <div className="grid gap-3 border-b border-slate-200 bg-white p-4 md:grid-cols-5">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 md:col-span-5">
-          <Filter className="h-4 w-4" aria-hidden="true" />
-          Filters
+      {/* ── Desktop filter bar (md+) ── */}
+      <div className="hidden border-b border-slate-200 bg-white p-4 md:block">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <Input
+              type="search"
+              placeholder="Search by reg no, type, circle, vendor…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="p-1 text-slate-400 hover:text-slate-600"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <Select
-          value={circleId}
-          onChange={(event) => {
-            setCircleId(event.target.value);
-            setDivisionId("");
-            setSubstationId("");
-          }}
-          aria-label="Circle"
+        <div className="grid grid-cols-5 gap-3">
+          {filterSelects}
+        </div>
+      </div>
+
+      {/* ── Mobile filter bar (< md) ── */}
+      <div className="border-b border-slate-200 bg-white p-3 md:hidden">
+        {/* Search always visible */}
+        <div className="relative mb-2">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <Input
+            type="search"
+            placeholder="Search vehicles…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {/* Filters toggle */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
         >
-          <option value="">All circles</option>
-          {lookups.circles.map((circle) => (
-            <option key={circle.id} value={circle.id}>
-              {circle.name}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={divisionId}
-          onChange={(event) => {
-            setDivisionId(event.target.value);
-            setSubstationId("");
-          }}
-          aria-label="Division"
-        >
-          <option value="">All divisions</option>
-          {divisions.map((division) => (
-            <option key={division.id} value={division.id}>
-              {division.name}
-            </option>
-          ))}
-        </Select>
-        <Select value={substationId} onChange={(event) => setSubstationId(event.target.value)} aria-label="Substation">
-          <option value="">All substations</option>
-          {substations.map((substation) => (
-            <option key={substation.id} value={substation.id}>
-              {substation.name}
-            </option>
-          ))}
-        </Select>
-        <Select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Status">
-          <option value="">All status</option>
-          <option value="active">Active</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="breakdown">Breakdown</option>
-          <option value="standby">Standby</option>
-          <option value="removed">Removed</option>
-          <option value="accident">Accident</option>
-        </Select>
-        <Select value={vendor} onChange={(event) => setVendor(event.target.value)} aria-label="Vendor">
-          <option value="">All vendors</option>
-          {vendors.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </Select>
+          <span className="flex items-center gap-2">
+            <Filter className="h-4 w-4" aria-hidden="true" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+                {activeFilterCount}
+              </span>
+            )}
+          </span>
+          {filtersOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+        </button>
+        {/* Collapsible filter dropdowns */}
+        {filtersOpen && (
+          <div className="mt-2 flex flex-col gap-2">
+            {filterSelects}
+          </div>
+        )}
       </div>
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">{filtered.length} vehicles visible</p>
