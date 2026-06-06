@@ -15,12 +15,14 @@ export function VehicleTable({
   vehicles,
   lookups,
   canUpdate = false,
+  canExport = false,
   editableVehicleIds,
   transferableVehicleIds,
 }: {
   vehicles: FleetVehicle[];
   lookups: LookupData;
   canUpdate?: boolean;
+  canExport?: boolean;
   editableVehicleIds?: string[];
   transferableVehicleIds?: string[];
 }) {
@@ -204,29 +206,31 @@ export function VehicleTable({
       </div>
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">{filtered.length} vehicles visible</p>
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            onClick={() =>
-              exportRows(
-                "frt-vehicles",
-                filtered.map((vehicle) => ({
-                  Registration: vehicle.registration_no,
-                  Type: vehicle.vehicle_type,
-                  Circle: vehicle.current_circle,
-                  Division: vehicle.division,
-                  Substation: vehicle.substation,
-                  Status: vehicle.status,
-                  Vendor: vehicle.vendor_name,
-                })),
-              )
-            }
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Export
-          </button>
-        </div>
+        {canExport && (
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              onClick={() =>
+                exportRows(
+                  "frt-vehicles",
+                  filtered.map((vehicle) => ({
+                    Registration: vehicle.registration_no,
+                    Type: vehicle.vehicle_type,
+                    Circle: vehicle.current_circle,
+                    Division: vehicle.division,
+                    Substation: vehicle.substation,
+                    Status: vehicle.status,
+                    Vendor: vehicle.vendor_name,
+                  })),
+                )
+              }
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Export
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-[1180px] w-full divide-y divide-slate-200 text-sm">

@@ -16,6 +16,7 @@ export default async function VehiclesPage() {
   const transferableVehicleIds = vehicles
     .filter((vehicle) => canInitiateTransfer(profile, vehicle, lookups))
     .map((vehicle) => vehicle.vehicle_id);
+  const canExport = profile.role === "super_admin" || profile.role === "zonal_manager";
 
   return (
     <AppShell profile={profile}>
@@ -31,6 +32,7 @@ export default async function VehiclesPage() {
         <VehicleTable
           vehicles={vehicles}
           lookups={lookups}
+          canExport={canExport}
           editableVehicleIds={editableVehicleIds}
           transferableVehicleIds={transferableVehicleIds}
         />
