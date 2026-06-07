@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { CreateUserPanel } from "@/components/admin/CreateUserPanel";
+import { RoleScopeFields } from "@/components/admin/RoleScopeFields";
 import {
   createCircleAction,
   createDivisionAction,
@@ -17,7 +18,7 @@ import {
 import { requireRole, ROLE_LABELS } from "@/lib/auth";
 import { getAdminUsers, getLookups } from "@/lib/data";
 import { formatDateTime } from "@/lib/utils/format";
-import type { AdminUserRow, LookupData, UserRole } from "@/lib/types";
+import type { AdminUserRow, LookupData } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -115,45 +116,13 @@ function UserEditor({ user, lookups }: { user: AdminUserRow; lookups: LookupData
         <Field label="Name">
           <Input name="name" defaultValue={user.name} required />
         </Field>
-        <Field label="Role">
-          <Select name="role" defaultValue={user.role}>
-            {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
-              <option key={role} value={role}>
-                {ROLE_LABELS[role]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Zone">
-          <Select name="zone_id" defaultValue={user.zone_id ?? ""}>
-            <option value="">No zone</option>
-            {(lookups.zones ?? []).map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Circle">
-          <Select name="circle_id" defaultValue={user.circle_id ?? ""}>
-            <option value="">No circle</option>
-            {lookups.circles.map((circle) => (
-              <option key={circle.id} value={circle.id}>
-                {circle.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Division">
-          <Select name="division_id" defaultValue={user.division_id ?? ""}>
-            <option value="">No division</option>
-            {lookups.divisions.map((division) => (
-              <option key={division.id} value={division.id}>
-                {division.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <RoleScopeFields
+          lookups={lookups}
+          defaultRole={user.role}
+          defaultZoneId={user.zone_id ?? ""}
+          defaultCircleId={user.circle_id ?? ""}
+          defaultDivisionId={user.division_id ?? ""}
+        />
         <Field label="Active">
           <Select name="is_active" defaultValue={String(user.is_active)}>
             <option value="true">Active</option>

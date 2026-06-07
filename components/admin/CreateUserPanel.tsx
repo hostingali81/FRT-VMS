@@ -5,9 +5,9 @@ import { useState } from "react";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DashedButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Label, Select } from "@/components/ui/form";
-import { ROLE_LABELS } from "@/lib/types";
-import type { LookupData, UserRole } from "@/lib/types";
+import { Input, Label } from "@/components/ui/form";
+import { RoleScopeFields } from "@/components/admin/RoleScopeFields";
+import type { LookupData } from "@/lib/types";
 
 export function CreateUserPanel({
   lookups,
@@ -58,45 +58,7 @@ export function CreateUserPanel({
           <Field label="Temporary Password">
             <Input name="password" type="password" required minLength={12} />
           </Field>
-          <Field label="Role">
-            <Select name="role" defaultValue="viewer" required>
-              {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
-                <option key={role} value={role}>
-                  {ROLE_LABELS[role]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Zone">
-            <Select name="zone_id">
-              <option value="">No zone</option>
-              {(lookups.zones ?? []).map((zone) => (
-                <option key={zone.id} value={zone.id}>
-                  {zone.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Circle">
-            <Select name="circle_id">
-              <option value="">No circle</option>
-              {lookups.circles.map((circle) => (
-                <option key={circle.id} value={circle.id}>
-                  {circle.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Division">
-            <Select name="division_id">
-              <option value="">No division</option>
-              {lookups.divisions.map((division) => (
-                <option key={division.id} value={division.id}>
-                  {division.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <RoleScopeFields lookups={lookups} defaultRole="viewer" />
           <div className="flex items-end">
             <SubmitButton className="w-full">Create User</SubmitButton>
           </div>

@@ -20,6 +20,34 @@ function requireAdminClient() {
   return supabase;
 }
 
+// Keep only the location scope that matches the role, and require the field the
+// role actually needs. Parent ids (circle/zone) come in as hidden inputs derived
+// on the client, so a division user still has a populated circle/zone.
+function normalizeScope(role: UserRole, formData: FormData) {
+  const zone = textValue(formData, "zone_id");
+  const circle = textValue(formData, "circle_id");
+  const division = textValue(formData, "division_id");
+
+  switch (role) {
+    case "super_admin":
+      return { zone_id: null, circle_id: null, division_id: null };
+    case "zonal_manager":
+      if (!zone) redirect("/admin?error=scope-required");
+      return { zone_id: zone, circle_id: null, division_id: null };
+    case "circle_incharge":
+      if (!circle) redirect("/admin?error=scope-required");
+      return { zone_id: zone, circle_id: circle, division_id: null };
+    case "division_incharge":
+      if (!division) redirect("/admin?error=scope-required");
+      return { zone_id: zone, circle_id: circle, division_id: division };
+    case "viewer":
+      if (!circle) redirect("/admin?error=scope-required");
+      return { zone_id: zone, circle_id: circle, division_id: null };
+    default:
+      return { zone_id: null, circle_id: null, division_id: null };
+  }
+}
+
 export async function createUserAction(formData: FormData) {
   await requireRole(["super_admin"]);
   const supabase = requireAdminClient();
@@ -32,6 +60,10 @@ export async function createUserAction(formData: FormData) {
   if (!email || !password || !name || !role) redirect("/admin?error=user-required");
   if (password.length < 12) redirect("/admin?error=password-too-short");
   if (!(USER_ROLES as readonly string[]).includes(role)) redirect("/admin?error=invalid-role");
+
+  // Validate scope before creating the auth user so a missing field can't leave
+  // an orphaned auth user with no profile.
+  const scope = normalizeScope(role, formData);
 
   const { data, error } = await supabase.auth.admin.createUser({
     email,
@@ -46,9 +78,7 @@ export async function createUserAction(formData: FormData) {
     id: data.user.id,
     name,
     role,
-    zone_id: textValue(formData, "zone_id"),
-    circle_id: textValue(formData, "circle_id"),
-    division_id: textValue(formData, "division_id"),
+    ...scope,
     is_active: true,
   });
 
@@ -68,14 +98,13 @@ export async function updateUserProfileAction(formData: FormData) {
   if (!userId || !name || !role) redirect("/admin?error=user-required");
   if (!(USER_ROLES as readonly string[]).includes(role)) redirect("/admin?error=invalid-role");
 
+  const scope = normalizeScope(role, formData);
   const { error } = await supabase
     .from("user_profiles")
     .update({
       name,
       role,
-      zone_id: textValue(formData, "zone_id"),
-      circle_id: textValue(formData, "circle_id"),
-      division_id: textValue(formData, "division_id"),
+      ...scope,
       is_active: textValue(formData, "is_active") === "true",
     })
     .eq("id", userId);
