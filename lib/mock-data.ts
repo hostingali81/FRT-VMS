@@ -7,6 +7,7 @@ import type {
   DriverAssignment,
   DriverRecord,
   FleetVehicle,
+  FuelLogEntry,
   FuelOwnershipHistoryItem,
   LookupData,
   StatusHistoryItem,
@@ -497,6 +498,72 @@ export const mockStatusHistory: StatusHistoryItem[] = [
     from_date: iso(-6),
     to_date: null,
     recorded_by: "Division Incharge",
+  },
+];
+
+export const mockFuelLogs: FuelLogEntry[] = [
+  // up32-ab-1245: two fills. First (oldest) has no prior fill → no GPS segment.
+  {
+    id: "fuel-log-2",
+    vehicle_id: "vehicle-up32-ab-1245",
+    log_date: iso(-18),
+    fuel_litres: 35,
+    fuel_amount: 3150,
+    gps_distance_km: null,
+    gps_synced_at: null,
+    recorded_by: "Circle Incharge",
+    notes: "Tank topped up before inspection",
+    created_at: iso(-18),
+  },
+  {
+    id: "fuel-log-1",
+    vehicle_id: "vehicle-up32-ab-1245",
+    log_date: iso(-3),
+    fuel_litres: 40,
+    fuel_amount: 3600,
+    gps_distance_km: 400, // 400 km / 40 L = 10 km/L
+    gps_synced_at: iso(-1),
+    recorded_by: "Circle Incharge",
+    notes: null,
+    created_at: iso(-3),
+  },
+  // up32-cd-8831: single fill → no segment yet
+  {
+    id: "fuel-log-3",
+    vehicle_id: "vehicle-up32-cd-8831",
+    log_date: iso(-5),
+    fuel_litres: 50,
+    fuel_amount: 4500,
+    gps_distance_km: null,
+    gps_synced_at: null,
+    recorded_by: "Division Incharge",
+    notes: "Monthly fill",
+    created_at: iso(-5),
+  },
+  // up41-af-5521: two fills
+  {
+    id: "fuel-log-5",
+    vehicle_id: "vehicle-up41-af-5521",
+    log_date: iso(-22),
+    fuel_litres: 42,
+    fuel_amount: 3780,
+    gps_distance_km: null,
+    gps_synced_at: null,
+    recorded_by: "Circle Incharge",
+    notes: null,
+    created_at: iso(-22),
+  },
+  {
+    id: "fuel-log-4",
+    vehicle_id: "vehicle-up41-af-5521",
+    log_date: iso(-7),
+    fuel_litres: 45,
+    fuel_amount: 4050,
+    gps_distance_km: 405, // 405 km / 45 L = 9 km/L
+    gps_synced_at: iso(-1),
+    recorded_by: "Circle Incharge",
+    notes: null,
+    created_at: iso(-7),
   },
 ];
 

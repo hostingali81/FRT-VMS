@@ -218,6 +218,19 @@ export type FuelOwnershipHistoryItem = {
   changed_by: string | null;
 };
 
+export type FuelLogEntry = {
+  id: string;
+  vehicle_id: string;
+  log_date: string;
+  fuel_litres: number;
+  fuel_amount: number | null;
+  gps_distance_km: number | null;
+  gps_synced_at: string | null;
+  recorded_by: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
 export type VehicleHistoryItem = {
   id: string;
   vehicle_id: string;

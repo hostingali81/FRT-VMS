@@ -6,7 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getVehicle } from "@/lib/data";
 import { canAccessLocation, canCreateVehicle, canEditVehicle, canManageDrivers, canTransferVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { driverSchema, fuelOwnershipSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
+import { driverSchema, fuelLogSchema, fuelOwnershipSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -264,6 +264,40 @@ export async function replaceDriverAssignmentAction(formData: FormData) {
   revalidatePath("/drivers");
   revalidatePath("/alerts");
   redirect(`/vehicles/${vehicleId}?driver=1`);
+}
+
+export async function addFuelLogAction(formData: FormData) {
+  const profile = await requireProfile();
+  const lookups = await getAllLookups();
+  const rawData = Object.fromEntries(formData.entries());
+  const validated = fuelLogSchema.safeParse(rawData);
+
+  if (!validated.success) {
+    const error = validated.error.issues[0].message;
+    redirect(`/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(error)}&tab=Fuel+Logs`);
+  }
+
+  const data = validated.data;
+  const vehicle = await getVehicle(data.vehicle_id, profile);
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
+
+  if (vehicle.fuel_ownership !== "company") throw new Error("Fuel logs can only be added for company-owned vehicles");
+
+  const supabase = requireAdminClient();
+  const { error } = await supabase.from("vehicle_fuel_logs").insert({
+    vehicle_id: data.vehicle_id,
+    log_date: data.log_date,
+    fuel_litres: data.fuel_litres,
+    fuel_amount: data.fuel_amount ?? null,
+    recorded_by: profile.name,
+    notes: data.notes ?? null,
+  });
+
+  if (error) throw new Error("Failed to save fuel entry: " + error.message);
+
+  revalidatePath(`/vehicles/${data.vehicle_id}`);
+  revalidatePath("/fuel");
+  redirect(`/vehicles/${data.vehicle_id}?fuellog=1&tab=Fuel+Logs`);
 }
 
 export async function createDriverAction(formData: FormData) {

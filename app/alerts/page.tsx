@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AlertTriangle, CarFront, IdCard } from "lucide-react";
+import { AlertTriangle, CarFront, CheckCircle2, IdCard } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,89 +8,217 @@ import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requireProfile } from "@/lib/auth";
 import { getAlertsData } from "@/lib/data";
+import { daysUntil, getWorstDocumentState } from "@/lib/utils/expiry";
+import type { DriverShift } from "@/lib/types";
+import { cn } from "@/lib/utils/cn";
 
 export const dynamic = "force-dynamic";
+
+const SHIFT_LABELS: Record<DriverShift, string> = {
+  shift_a: "Shift A",
+  shift_b: "Shift B",
+  shift_c: "Shift C",
+};
 
 export default async function AlertsPage() {
   const profile = await requireProfile();
   const { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers } = await getAlertsData(profile);
 
+  const sortedDocAlerts = [...documentAlerts].sort((a, b) => {
+    const stateA = getWorstDocumentState([a.insurance_expiry, a.fitness_expiry, a.pollution_expiry]);
+    const stateB = getWorstDocumentState([b.insurance_expiry, b.fitness_expiry, b.pollution_expiry]);
+    if (stateA === "expired" && stateB !== "expired") return -1;
+    if (stateB === "expired" && stateA !== "expired") return 1;
+    const minA = Math.min(...[a.insurance_expiry, a.fitness_expiry, a.pollution_expiry].map((d) => daysUntil(d) ?? Infinity));
+    const minB = Math.min(...[b.insurance_expiry, b.fitness_expiry, b.pollution_expiry].map((d) => daysUntil(d) ?? Infinity));
+    return minA - minB;
+  });
+
+  const sortedLicenseAlerts = [...driverLicenseAlerts].sort(
+    (a, b) => (daysUntil(a.license_expiry) ?? Infinity) - (daysUntil(b.license_expiry) ?? Infinity),
+  );
+
+  const expiredDocCount = sortedDocAlerts.filter(
+    (v) => getWorstDocumentState([v.insurance_expiry, v.fitness_expiry, v.pollution_expiry]) === "expired",
+  ).length;
+  const expiredLicenseCount = sortedLicenseAlerts.filter((d) => (daysUntil(d.license_expiry) ?? 1) < 0).length;
+  const totalExpired = expiredDocCount + expiredLicenseCount;
+  const totalExpiring = (documentAlerts.length - expiredDocCount) + (driverLicenseAlerts.length - expiredLicenseCount);
+
   return (
     <AppShell profile={profile}>
       <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor" />
-      <div className="grid gap-4 px-4 py-5 sm:px-6 lg:px-8 xl:grid-cols-3">
-        <AlertCard icon={<AlertTriangle />} title="Vehicle Documents" count={documentAlerts.length}>
-          <div className="space-y-3">
-            {documentAlerts.map((vehicle) => (
-              <div key={vehicle.vehicle_id} className="rounded-md border border-slate-200 p-3">
-                <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
-                  {vehicle.registration_no}
-                </Link>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <ExpiryBadge label="Insurance" date={vehicle.insurance_expiry} />
-                  <ExpiryBadge label="Fitness" date={vehicle.fitness_expiry} />
-                  <ExpiryBadge label="Pollution" date={vehicle.pollution_expiry} />
-                </div>
-              </div>
-            ))}
-          </div>
+
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+          <SummaryStat value={totalExpired} label="Expired" urgent />
+          <SummaryStat value={totalExpiring} label="Expiring within 30 days" />
+          <SummaryStat value={vehiclesWithoutAllDrivers.length} label="Vehicles short-staffed" />
+        </div>
+      </div>
+
+      <div className="grid gap-5 px-4 py-6 sm:px-6 lg:px-8 xl:grid-cols-3">
+        <AlertCard icon={AlertTriangle} title="Vehicle Documents" count={documentAlerts.length} expiredCount={expiredDocCount}>
+          {sortedDocAlerts.length === 0 ? (
+            <ClearState message="All vehicle documents are in order" />
+          ) : (
+            <div className="space-y-2">
+              {sortedDocAlerts.map((vehicle) => {
+                const worstState = getWorstDocumentState([vehicle.insurance_expiry, vehicle.fitness_expiry, vehicle.pollution_expiry]);
+                return (
+                  <AlertRow key={vehicle.vehicle_id} severity={worstState as "expired" | "expiring"}>
+                    <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
+                      {vehicle.registration_no}
+                    </Link>
+                    {(vehicle.current_circle || vehicle.division) && (
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {[vehicle.current_circle, vehicle.division].filter(Boolean).join(" › ")}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <ExpiryBadge label="Insurance" date={vehicle.insurance_expiry} />
+                      <ExpiryBadge label="Fitness" date={vehicle.fitness_expiry} />
+                      <ExpiryBadge label="Pollution" date={vehicle.pollution_expiry} />
+                    </div>
+                  </AlertRow>
+                );
+              })}
+            </div>
+          )}
         </AlertCard>
-        <AlertCard icon={<IdCard />} title="Driver Licenses" count={driverLicenseAlerts.length}>
-          <div className="space-y-3">
-            {driverLicenseAlerts.map((driver) => (
-              <div key={driver.driver_id} className="rounded-md border border-slate-200 p-3">
-                <p className="font-semibold text-slate-950">{driver.name}</p>
-                <p className="break-words text-sm text-slate-500">{driver.circle} / {driver.mobile ?? "No mobile"}</p>
-                <div className="mt-2">
-                  <ExpiryBadge date={driver.license_expiry} />
-                </div>
-              </div>
-            ))}
-          </div>
+
+        <AlertCard icon={IdCard} title="Driver Licenses" count={driverLicenseAlerts.length} expiredCount={expiredLicenseCount}>
+          {sortedLicenseAlerts.length === 0 ? (
+            <ClearState message="All driver licenses are valid" />
+          ) : (
+            <div className="space-y-2">
+              {sortedLicenseAlerts.map((driver) => {
+                const days = daysUntil(driver.license_expiry);
+                const severity: "expired" | "expiring" = days !== null && days < 0 ? "expired" : "expiring";
+                return (
+                  <AlertRow key={driver.driver_id} severity={severity}>
+                    <p className="font-semibold text-slate-950">{driver.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {driver.circle}
+                      {driver.mobile ? ` · ${driver.mobile}` : ""}
+                    </p>
+                    <div className="mt-2">
+                      <ExpiryBadge label="License" date={driver.license_expiry} />
+                    </div>
+                  </AlertRow>
+                );
+              })}
+            </div>
+          )}
         </AlertCard>
-        <AlertCard icon={<CarFront />} title="Driver Coverage" count={vehiclesWithoutAllDrivers.length}>
-          <div className="space-y-3">
-            {vehiclesWithoutAllDrivers.map((vehicle) => (
-              <div key={vehicle.vehicle_id} className="rounded-md border border-slate-200 p-3">
-                <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
-                  {vehicle.registration_no}
-                </Link>
-                <p className="mt-1 break-words text-sm text-slate-500">{vehicle.division ?? "Unassigned"} / {vehicle.substation ?? "Unassigned"}</p>
-                <Badge tone="yellow" className="mt-2">One or more shifts empty</Badge>
-              </div>
-            ))}
-          </div>
+
+        <AlertCard icon={CarFront} title="Driver Coverage" count={vehiclesWithoutAllDrivers.length} expiredCount={0}>
+          {vehiclesWithoutAllDrivers.length === 0 ? (
+            <ClearState message="All vehicles have complete shift coverage" />
+          ) : (
+            <div className="space-y-2">
+              {vehiclesWithoutAllDrivers.map((vehicle) => (
+                <AlertRow key={vehicle.vehicle_id} severity="expiring">
+                  <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
+                    {vehicle.registration_no}
+                  </Link>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                    {[vehicle.division, vehicle.substation].filter(Boolean).join(" › ") || "Unassigned"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {vehicle.missingShifts.map((shift) => (
+                      <Badge key={shift} tone="yellow">
+                        {SHIFT_LABELS[shift]} vacant
+                      </Badge>
+                    ))}
+                  </div>
+                </AlertRow>
+              ))}
+            </div>
+          )}
         </AlertCard>
       </div>
     </AppShell>
   );
 }
 
+function SummaryStat({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
+  const color = value === 0 ? "text-emerald-600" : urgent ? "text-red-600" : "text-amber-700";
+  return (
+    <span className="flex items-center gap-1.5 text-sm">
+      <span className={cn("text-base font-bold tabular-nums", color)}>{value}</span>
+      <span className="text-slate-500">{label}</span>
+    </span>
+  );
+}
+
 function AlertCard({
-  icon,
+  icon: Icon,
   title,
   count,
+  expiredCount,
   children,
 }: {
-  icon: React.ReactNode;
+  icon: LucideIcon;
   title: string;
   count: number;
+  expiredCount: number;
   children: React.ReactNode;
 }) {
+  const isAllClear = count === 0;
+  const hasExpired = expiredCount > 0;
+
+  const iconStyle = isAllClear
+    ? "bg-emerald-50 text-emerald-600 ring-emerald-200"
+    : hasExpired
+      ? "bg-red-50 text-red-600 ring-red-200"
+      : "bg-amber-50 text-amber-600 ring-amber-200";
+
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle>{title}</CardTitle>
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700">
-            <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle>{title}</CardTitle>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {isAllClear ? (
+                <Badge tone="green">All clear</Badge>
+              ) : (
+                <>
+                  {expiredCount > 0 && <Badge tone="red">{expiredCount} expired</Badge>}
+                  {count - expiredCount > 0 && <Badge tone="yellow">{count - expiredCount} expiring</Badge>}
+                </>
+              )}
+            </div>
+          </div>
+          <span className={cn("inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ring-1", iconStyle)}>
+            <Icon className="h-4 w-4" />
           </span>
         </div>
       </CardHeader>
-      <CardContent>
-        <Badge tone={count > 0 ? "red" : "green"}>{count} open</Badge>
-        <div className="mt-4">{children}</div>
-      </CardContent>
+      <CardContent className="max-h-[460px] overflow-y-auto">{children}</CardContent>
     </Card>
+  );
+}
+
+function AlertRow({ severity, children }: { severity: "expired" | "expiring"; children: React.ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border-l-2 bg-slate-50 px-3 py-2.5",
+        severity === "expired" ? "border-red-400" : "border-amber-400",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ClearState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+      <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+      <p className="text-sm font-medium text-slate-600">{message}</p>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   mockActivity,
   mockDriverAssignments,
   mockDrivers,
+  mockFuelLogs,
   mockFuelOwnershipHistory,
   mockLookups,
   mockStatusHistory,
@@ -13,23 +14,26 @@ import {
 } from "@/lib/mock-data";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { accessibleCircleIds, accessibleDivisionIds, canSeeVehicle, filterLookupsForProfile } from "@/lib/permissions";
-import type {
-  ActivityItem,
-  AdminUserRow,
-  Circle,
-  CircleSummary,
-  Division,
-  DivisionSummary,
-  DriverAssignment,
-  DriverRecord,
-  FleetVehicle,
-  FuelOwnershipHistoryItem,
-  LookupData,
-  StatusHistoryItem,
-  Substation,
-  TransferRecord,
-  UserProfile,
-  VehicleHistoryItem,
+import {
+  DRIVER_SHIFTS,
+  type ActivityItem,
+  type AdminUserRow,
+  type Circle,
+  type CircleSummary,
+  type Division,
+  type DivisionSummary,
+  type DriverAssignment,
+  type DriverRecord,
+  type DriverShift,
+  type FleetVehicle,
+  type FuelLogEntry,
+  type FuelOwnershipHistoryItem,
+  type LookupData,
+  type StatusHistoryItem,
+  type Substation,
+  type TransferRecord,
+  type UserProfile,
+  type VehicleHistoryItem,
 } from "@/lib/types";
 import { getWorstDocumentState } from "@/lib/utils/expiry";
 
@@ -322,6 +326,68 @@ export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserP
   return (data ?? []) as FuelOwnershipHistoryItem[];
 }
 
+export async function getFuelLogs(vehicleId: string, profile?: UserProfile | null): Promise<FuelLogEntry[]> {
+  if (profile) {
+    const vehicle = await getVehicle(vehicleId, profile);
+    if (!vehicle) return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockFuelLogs.filter((row) => row.vehicle_id === vehicleId);
+
+  const { data, error } = await supabase
+    .from("vehicle_fuel_logs")
+    .select("*")
+    .eq("vehicle_id", vehicleId)
+    .order("log_date", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getFuelLogs failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as FuelLogEntry[];
+}
+
+export async function getFuelLogsForMonth(
+  profile?: UserProfile | null,
+  yearMonth?: string,
+): Promise<FuelLogEntry[]> {
+  const month = yearMonth ?? new Date().toISOString().slice(0, 7);
+  const from = `${month}-01`;
+  // Last day of month: go to first of next month minus 1
+  const [year, mon] = month.split("-").map(Number);
+  const lastDay = new Date(year, mon, 0).getDate();
+  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) {
+    const logs = mockFuelLogs.filter((l) => l.log_date >= from && l.log_date <= to);
+    if (!profile) return logs;
+    const vehicles = await getVehicles(profile);
+    const ids = new Set(vehicles.map((v) => v.vehicle_id));
+    return logs.filter((l) => ids.has(l.vehicle_id));
+  }
+
+  const { data, error } = await supabase
+    .from("vehicle_fuel_logs")
+    .select("*")
+    .gte("log_date", from)
+    .lte("log_date", to)
+    .order("log_date", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getFuelLogsForMonth failed:", error.message);
+    return [];
+  }
+
+  const allLogs = (data ?? []) as FuelLogEntry[];
+  if (!profile) return allLogs;
+
+  const vehicles = await getVehicles(profile);
+  const ids = new Set(vehicles.map((v) => v.vehicle_id));
+  return allLogs.filter((l) => ids.has(l.vehicle_id));
+}
+
 export const getAllStatusHistory = cache(async (profile?: UserProfile | null): Promise<StatusHistoryItem[]> => {
   const rows = await selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date");
   if (!profile) return rows;
@@ -447,11 +513,18 @@ export async function getAlertsData(profile?: UserProfile | null) {
     ["expiring", "expired"].includes(getWorstDocumentState([driver.license_expiry])),
   );
 
-  const vehiclesWithoutAllDrivers = vehicles.filter((vehicle) => {
-    const activeAssignments = assignments.filter((assignment) => assignment.vehicle_id === vehicle.vehicle_id && !assignment.to_date);
-    const shifts = new Set(activeAssignments.map((assignment) => assignment.shift));
-    return vehicle.status !== "removed" && shifts.size < 3;
-  });
+  const vehiclesWithoutAllDrivers = vehicles
+    .filter((vehicle) => {
+      const activeAssignments = assignments.filter((a) => a.vehicle_id === vehicle.vehicle_id && !a.to_date);
+      const shifts = new Set(activeAssignments.map((a) => a.shift));
+      return vehicle.status !== "removed" && shifts.size < 3;
+    })
+    .map((vehicle) => {
+      const activeAssignments = assignments.filter((a) => a.vehicle_id === vehicle.vehicle_id && !a.to_date);
+      const filledShifts = new Set(activeAssignments.map((a) => a.shift));
+      const missingShifts = (DRIVER_SHIFTS as readonly DriverShift[]).filter((s) => !filledShifts.has(s));
+      return { ...vehicle, missingShifts };
+    });
 
   return { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers };
 }

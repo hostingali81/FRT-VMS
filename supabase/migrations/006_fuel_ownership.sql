@@ -25,8 +25,12 @@ create or replace trigger prevent_fuel_ownership_history_delete
 before delete on public.vehicle_fuel_ownership_history
 for each row execute function public.prevent_history_delete();
 
--- Rebuild vehicle_current_view to include fuel_ownership
-create or replace view public.vehicle_current_view
+-- Rebuild vehicle_current_view to include fuel_ownership.
+-- DROP + CREATE (not CREATE OR REPLACE) because we insert fuel_ownership in the
+-- middle of the column list — replace can only append columns at the end, not reorder.
+-- Safe: no other view depends on vehicle_current_view.
+drop view if exists public.vehicle_current_view;
+create view public.vehicle_current_view
 with (security_invoker = true)
 as
 select

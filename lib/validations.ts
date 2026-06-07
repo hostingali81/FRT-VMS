@@ -53,3 +53,17 @@ export const fuelOwnershipSchema = z.object({
   from_date: z.string().min(1, "Date is required"),
   remarks: z.string().optional().nullable(),
 });
+
+export const fuelLogSchema = z.object({
+  vehicle_id: z.string().uuid(),
+  log_date: z.string().min(1, "Date is required"),
+  fuel_litres: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : Number(v)),
+    z.number().positive("Litres must be greater than 0"),
+  ),
+  fuel_amount: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.number().min(0, "Amount must be 0 or more").nullable().optional(),
+  ),
+  notes: z.string().optional().nullable(),
+});

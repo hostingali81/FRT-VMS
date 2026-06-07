@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Edit3 } from "lucide-react";
+import { ChevronDown, ChevronUp, Edit3, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -10,14 +10,31 @@ import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Timeline } from "@/components/shared/Timeline";
 import { Badge } from "@/components/ui/badge";
-import type { DriverAssignment, DriverRecord, FleetVehicle, FuelOwnershipHistoryItem, StatusHistoryItem, TransferRecord } from "@/lib/types";
+import type {
+  DriverAssignment,
+  DriverRecord,
+  FleetVehicle,
+  FuelLogEntry,
+  FuelOwnershipHistoryItem,
+  StatusHistoryItem,
+  TransferRecord,
+} from "@/lib/types";
 import { formatDate, titleCase } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 type QuickAction = "status" | "fuel" | null;
 type ShiftKey = "shift_a" | "shift_b" | "shift_c";
 
-const TABS = ["Overview", "Drivers", "Transfers", "Status History", "Fuel History", "Driver History", "Documents"] as const;
+const TABS = [
+  "Overview",
+  "Drivers",
+  "Fuel Logs",
+  "Transfers",
+  "Status History",
+  "Fuel History",
+  "Driver History",
+  "Documents",
+] as const;
 type TabName = (typeof TABS)[number];
 
 export function VehicleProfileTabs({
@@ -25,27 +42,34 @@ export function VehicleProfileTabs({
   drivers,
   transfers,
   statusHistory,
+  fuelLogs,
   fuelOwnershipHistory,
   availableDrivers,
   canManage,
+  defaultTab,
   changeStatusAction,
   changeFuelOwnershipAction,
   replaceDriverAction,
+  addFuelLogAction,
 }: {
   vehicle: FleetVehicle;
   drivers: DriverAssignment[];
   transfers: TransferRecord[];
   statusHistory: StatusHistoryItem[];
+  fuelLogs: FuelLogEntry[];
   fuelOwnershipHistory: FuelOwnershipHistoryItem[];
   availableDrivers: DriverRecord[];
   canManage: boolean;
+  defaultTab?: TabName;
   changeStatusAction: (formData: FormData) => Promise<void>;
   changeFuelOwnershipAction: (formData: FormData) => Promise<void>;
   replaceDriverAction: (formData: FormData) => Promise<void>;
+  addFuelLogAction: (formData: FormData) => Promise<void>;
 }) {
-  const [tab, setTab] = useState<TabName>("Overview");
+  const [tab, setTab] = useState<TabName>(defaultTab ?? "Overview");
   const [openAction, setOpenAction] = useState<QuickAction>(null);
   const [openShift, setOpenShift] = useState<ShiftKey | null>(null);
+  const [showFuelForm, setShowFuelForm] = useState(false);
 
   const currentDrivers = useMemo(() => drivers.filter((d) => !d.to_date), [drivers]);
   const activeAvailableDrivers = useMemo(
@@ -54,6 +78,36 @@ export function VehicleProfileTabs({
   );
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // Newest first; avg = GPS distance (km since previous fill) / litres of this fill
+  const fuelLogsWithDerived = useMemo(() => {
+    return [...fuelLogs]
+      .sort((a, b) => b.log_date.localeCompare(a.log_date))
+      .map((log) => {
+        const avg =
+          log.gps_distance_km !== null && log.fuel_litres > 0
+            ? +(log.gps_distance_km / log.fuel_litres).toFixed(1)
+            : null;
+        return { ...log, avg };
+      });
+  }, [fuelLogs]);
+
+  const hasGpsDevice = Boolean(vehicle.gps_device_id);
+  const anySynced = useMemo(() => fuelLogs.some((l) => l.gps_synced_at), [fuelLogs]);
+
+  // Monthly summary for fuel logs (current calendar month)
+  const currentMonthSummary = useMemo(() => {
+    const monthStr = new Date().toISOString().slice(0, 7);
+    const monthLogs = fuelLogs.filter((l) => l.log_date.startsWith(monthStr));
+    return {
+      entries: monthLogs.length,
+      litres: monthLogs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0),
+      amount: monthLogs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0),
+    };
+  }, [fuelLogs]);
+
+  const isCompany = vehicle.fuel_ownership === "company";
+  const canAddFuelLog = canManage && isCompany;
 
   return (
     <div>
@@ -278,7 +332,6 @@ export function VehicleProfileTabs({
                     <CardTitle>{shiftLabel}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Driver info */}
                     {driver ? (
                       <div className="space-y-1">
                         <p className="font-semibold text-slate-900">{driver.driver_name}</p>
@@ -290,7 +343,6 @@ export function VehicleProfileTabs({
                       <p className="text-sm italic text-slate-400">No driver assigned</p>
                     )}
 
-                    {/* Toggle assign form */}
                     {canManage && (
                       <>
                         <button
@@ -338,6 +390,193 @@ export function VehicleProfileTabs({
                 </Card>
               );
             })}
+          </div>
+        )}
+
+        {/* ─── FUEL LOGS ─── */}
+        {tab === "Fuel Logs" && (
+          <div className="space-y-4">
+
+            {/* Vendor vehicle message */}
+            {!isCompany && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-4">
+                <p className="text-sm font-semibold text-amber-800">Vendor-managed fuel</p>
+                <p className="mt-1 text-sm text-amber-700">
+                  This vehicle runs on vendor fuel. Fuel entries are not tracked here.
+                  KM readings will appear automatically once GPS integration is live.
+                </p>
+              </div>
+            )}
+
+            {/* Summary strip — company vehicles only */}
+            {isCompany && (
+              <div className="flex flex-wrap gap-6 rounded-lg border border-slate-200 bg-white px-5 py-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This Month — Entries</p>
+                  <p className="mt-1 text-xl font-bold text-slate-900">{currentMonthSummary.entries}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This Month — Fuel</p>
+                  <p className="mt-1 text-xl font-bold text-slate-900">
+                    {currentMonthSummary.litres > 0 ? `${currentMonthSummary.litres} L` : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This Month — Amount</p>
+                  <p className="mt-1 text-xl font-bold text-slate-900">
+                    {currentMonthSummary.amount > 0 ? `₹${currentMonthSummary.amount.toLocaleString("en-IN")}` : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Add Entry form — company + canManage only */}
+            {canAddFuelLog && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Add Fuel Entry</CardTitle>
+                    <button
+                      type="button"
+                      onClick={() => setShowFuelForm((v) => !v)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      {showFuelForm ? (
+                        <>
+                          <X className="h-3.5 w-3.5" /> Cancel
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5" /> New Entry
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </CardHeader>
+                {showFuelForm && (
+                  <CardContent>
+                    <form action={addFuelLogAction} className="grid gap-4 sm:grid-cols-2">
+                      <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
+
+                      <div className="space-y-1.5">
+                        <Label>Date *</Label>
+                        <Input name="log_date" type="date" defaultValue={today} required />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Fuel Filled (Litres) *</Label>
+                        <Input
+                          name="fuel_litres"
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder="e.g. 40"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Amount Paid (₹) *</Label>
+                        <Input
+                          name="fuel_amount"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="e.g. 3600"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Notes <span className="font-normal text-slate-400">(optional)</span></Label>
+                        <Input name="notes" placeholder="Any remarks about this fill-up" />
+                      </div>
+
+                      <p className="text-xs text-slate-500 sm:col-span-2">
+                        Sirf date, litres aur amount bharein. Kitne KM chala (do fills ke beech) GPS se
+                        automatically aata hai — admin ke <span className="font-medium">Sync GPS Distance</span> ke baad
+                        average dikhne lagega.
+                      </p>
+
+                      <div className="sm:col-span-2">
+                        <SubmitButton className="w-full sm:w-auto">Save Fuel Entry</SubmitButton>
+                      </div>
+                    </form>
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
+            {/* GPS device hint for company vehicles */}
+            {isCompany && !hasGpsDevice && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
+                Is vehicle ka <span className="font-medium">GPS Device ID</span> set nahi hai — distance auto-fetch
+                nahi hoga. Vehicle edit karke Traccar device ID daalein.
+              </div>
+            )}
+
+            {/* Fuel log history table */}
+            <Card className="overflow-hidden">
+              <CardHeader>
+                <CardTitle>History</CardTitle>
+              </CardHeader>
+              {fuelLogsWithDerived.length === 0 ? (
+                <CardContent className="py-8">
+                  <EmptyState
+                    message={
+                      isCompany
+                        ? "No fuel entries yet. Add the first entry above."
+                        : "No fuel entries for this vehicle."
+                    }
+                  />
+                </CardContent>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">Date</th>
+                        <th className="px-5 py-3">Litres</th>
+                        <th className="px-5 py-3">Amount</th>
+                        <th className="px-5 py-3">KM (GPS)</th>
+                        <th className="px-5 py-3">Avg km/L</th>
+                        <th className="px-5 py-3">Notes</th>
+                        <th className="px-5 py-3">By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {fuelLogsWithDerived.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50">
+                          <td className="px-5 py-3.5 font-medium text-slate-900">{formatDate(log.log_date)}</td>
+                          <td className="px-5 py-3.5 text-slate-700">{log.fuel_litres} L</td>
+                          <td className="px-5 py-3.5 text-slate-700">
+                            {log.fuel_amount != null ? `₹${log.fuel_amount.toLocaleString("en-IN")}` : "—"}
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-600">
+                            {log.gps_distance_km != null ? (
+                              `${log.gps_distance_km.toLocaleString("en-IN")} km`
+                            ) : (
+                              <span className="text-xs text-slate-400">
+                                {anySynced ? "no GPS data" : "not synced"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-600">
+                            {log.avg != null ? (
+                              <Badge tone="blue">{log.avg} km/L</Badge>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-500">{log.notes ?? "—"}</td>
+                          <td className="px-5 py-3.5 text-slate-500">{log.recorded_by ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           </div>
         )}
 
@@ -392,7 +631,7 @@ export function VehicleProfileTabs({
           </Card>
         )}
 
-        {/* ─── FUEL HISTORY ─── */}
+        {/* ─── FUEL HISTORY (ownership changes) ─── */}
         {tab === "Fuel History" && (
           <Card>
             <CardContent className="pt-6">

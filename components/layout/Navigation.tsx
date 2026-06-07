@@ -6,6 +6,8 @@ import { useState, useEffect } from "react";
 import {
   AlertTriangle,
   CarFront,
+  ClipboardList,
+  Droplets,
   Gauge,
   History,
   Loader2,
@@ -22,6 +24,8 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/vehicles", label: "Vehicles", icon: CarFront },
   { href: "/drivers", label: "Drivers", icon: UserRound },
+  { href: "/fuel", label: "Fuel Dashboard", icon: Droplets },
+  { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
   { href: "/vehicle-history", label: "Vehicle History", icon: History },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/admin", label: "Admin", icon: Settings },
