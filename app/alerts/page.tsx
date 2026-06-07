@@ -49,15 +49,16 @@ export default async function AlertsPage() {
     <AppShell profile={profile}>
       <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor" />
 
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+      <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+        {/* Summary — three clear stat cards */}
+        <div className="grid grid-cols-3 gap-3">
           <SummaryStat value={totalExpired} label="Expired" urgent />
-          <SummaryStat value={totalExpiring} label="Expiring within 30 days" />
-          <SummaryStat value={vehiclesWithoutAllDrivers.length} label="Vehicles short-staffed" />
+          <SummaryStat value={totalExpiring} label="Expiring soon" />
+          <SummaryStat value={vehiclesWithoutAllDrivers.length} label="Short-staffed" />
         </div>
-      </div>
 
-      <div className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8 xl:grid-cols-3">
+        {/* Alert lists — single column on mobile, three across on wide screens */}
+        <div className="grid gap-4 xl:grid-cols-3">
         <AlertCard icon={AlertTriangle} title="Vehicle Documents" count={documentAlerts.length} expiredCount={expiredDocCount}>
           {sortedDocAlerts.length === 0 ? (
             <ClearState message="All vehicle documents are in order" />
@@ -137,6 +138,7 @@ export default async function AlertsPage() {
             </div>
           )}
         </AlertCard>
+        </div>
       </div>
     </AppShell>
   );
@@ -145,10 +147,10 @@ export default async function AlertsPage() {
 function SummaryStat({ value, label, urgent }: { value: number; label: string; urgent?: boolean }) {
   const color = value === 0 ? "text-emerald-600" : urgent ? "text-red-600" : "text-amber-700";
   return (
-    <span className="flex items-center gap-1.5 text-sm">
-      <span className={cn("text-base font-bold tabular-nums", color)}>{value}</span>
-      <span className="text-slate-500">{label}</span>
-    </span>
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-center">
+      <p className={cn("text-xl font-bold tabular-nums sm:text-2xl", color)}>{value}</p>
+      <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
+    </div>
   );
 }
 
@@ -196,7 +198,7 @@ function AlertCard({
           </span>
         </div>
       </CardHeader>
-      <CardContent className="max-h-[460px] overflow-y-auto">{children}</CardContent>
+      <CardContent className="lg:max-h-[480px] lg:overflow-y-auto">{children}</CardContent>
     </Card>
   );
 }
