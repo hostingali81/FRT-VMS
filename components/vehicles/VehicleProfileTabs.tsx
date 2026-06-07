@@ -10,6 +10,7 @@ import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Timeline } from "@/components/shared/Timeline";
 import { Badge } from "@/components/ui/badge";
+import { QuickFuelForm } from "@/components/fuel/QuickFuelForm";
 import type {
   DriverAssignment,
   DriverRecord,
@@ -108,9 +109,12 @@ export function VehicleProfileTabs({
 
   const isCompany = vehicle.fuel_ownership === "company";
   const canAddFuelLog = canManage && isCompany;
-  const defaultFuelType = ["CNG", "Petrol", "Diesel"].includes(vehicle.fuel_type ?? "")
-    ? (vehicle.fuel_type as string)
-    : "Diesel";
+  const fuelVehicleOption = {
+    vehicle_id: vehicle.vehicle_id,
+    registration_no: vehicle.registration_no,
+    division: vehicle.division ?? null,
+    fuel_type: vehicle.fuel_type ?? null,
+  };
 
   return (
     <div>
@@ -398,7 +402,7 @@ export function VehicleProfileTabs({
 
         {/* ─── FUEL LOGS ─── */}
         {tab === "Fuel Logs" && (
-          <div className="space-y-4">
+          <div className="space-y-5">
 
             {/* Vendor vehicle message */}
             {!isCompany && (
@@ -413,110 +417,54 @@ export function VehicleProfileTabs({
 
             {/* Summary strip — company vehicles only */}
             {isCompany && (
-              <div className="flex flex-wrap gap-6 rounded-lg border border-slate-200 bg-white px-5 py-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This Month — Entries</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">{currentMonthSummary.entries}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This Month — Fuel</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {currentMonthSummary.litres > 0 ? `${currentMonthSummary.litres} L` : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This Month — Amount</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {currentMonthSummary.amount > 0 ? `₹${currentMonthSummary.amount.toLocaleString("en-IN")}` : "—"}
-                  </p>
-                </div>
+              <div className="grid grid-cols-3 gap-3">
+                <FuelStat label="Entries this month" value={String(currentMonthSummary.entries)} />
+                <FuelStat
+                  label="Fuel this month"
+                  value={currentMonthSummary.litres > 0 ? `${currentMonthSummary.litres} L` : "—"}
+                />
+                <FuelStat
+                  label="Amount this month"
+                  value={currentMonthSummary.amount > 0 ? `₹${currentMonthSummary.amount.toLocaleString("en-IN")}` : "—"}
+                />
               </div>
             )}
 
-            {/* Add Entry form — company + canManage only */}
+            {/* Add Entry — company + canManage only. Big primary button reveals the simple form. */}
             {canAddFuelLog && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Add Fuel Entry</CardTitle>
-                    <button
-                      type="button"
-                      onClick={() => setShowFuelForm((v) => !v)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      {showFuelForm ? (
-                        <>
-                          <X className="h-3.5 w-3.5" /> Cancel
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-3.5 w-3.5" /> New Entry
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </CardHeader>
-                {showFuelForm && (
+              showFuelForm ? (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Add Fuel Entry</CardTitle>
+                      <button
+                        type="button"
+                        onClick={() => setShowFuelForm(false)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <X className="h-3.5 w-3.5" /> Cancel
+                      </button>
+                    </div>
+                  </CardHeader>
                   <CardContent>
-                    <form action={addFuelLogAction} className="grid gap-4 sm:grid-cols-2">
-                      <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
-
-                      <div className="space-y-1.5">
-                        <Label>Date *</Label>
-                        <Input name="log_date" type="date" defaultValue={today} required />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Fuel Type *</Label>
-                        <Select name="fuel_type" defaultValue={defaultFuelType} required>
-                          <option value="Diesel">Diesel</option>
-                          <option value="Petrol">Petrol</option>
-                          <option value="CNG">CNG</option>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Fuel Filled (Litres) *</Label>
-                        <Input
-                          name="fuel_litres"
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          placeholder="e.g. 40"
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Amount Paid (₹) *</Label>
-                        <Input
-                          name="fuel_amount"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="e.g. 3600"
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-1.5 sm:col-span-2">
-                        <Label>Notes <span className="font-normal text-slate-400">(optional)</span></Label>
-                        <Input name="notes" placeholder="Any remarks about this fill-up" />
-                      </div>
-
-                      <p className="text-xs text-slate-500 sm:col-span-2">
-                        Sirf date, litres aur amount bharein. Kitne KM chala (do fills ke beech) GPS se
-                        automatically aata hai — admin ke <span className="font-medium">Sync GPS Distance</span> ke baad
-                        average dikhne lagega.
-                      </p>
-
-                      <div className="sm:col-span-2">
-                        <SubmitButton className="w-full sm:w-auto">Save Fuel Entry</SubmitButton>
-                      </div>
-                    </form>
+                    <QuickFuelForm
+                      vehicles={[fuelVehicleOption]}
+                      action={addFuelLogAction}
+                      today={today}
+                      returnTo="vehicle"
+                      locked
+                    />
                   </CardContent>
-                )}
-              </Card>
+                </Card>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowFuelForm(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-white py-4 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                >
+                  <Plus className="h-4 w-4" /> Add Fuel Entry
+                </button>
+              )
             )}
 
             {/* GPS device hint for company vehicles */}
@@ -757,5 +705,14 @@ function Field({
 function EmptyState({ message }: { message: string }) {
   return (
     <p className="py-8 text-center text-sm text-slate-400">{message}</p>
+  );
+}
+
+function FuelStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-center">
+      <p className="text-lg font-bold text-slate-900 sm:text-xl">{value}</p>
+      <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
+    </div>
   );
 }

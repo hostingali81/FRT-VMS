@@ -24,47 +24,58 @@ export function QuickFuelForm({
   vehicles,
   action,
   today,
+  returnTo = "add",
+  locked = false,
 }: {
   vehicles: VehicleOption[];
   action: (formData: FormData) => Promise<void>;
   today: string;
+  /** Value for the hidden return_to field — "add" returns to /fuel-log/add, otherwise back to the vehicle profile. */
+  returnTo?: string;
+  /** When true the vehicle is fixed (vehicles[0]) and shown as a label instead of a dropdown. */
+  locked?: boolean;
 }) {
-  const [vehicleId, setVehicleId] = useState("");
-  const [fuelType, setFuelType] = useState<FuelType>("Diesel");
+  const lockedVehicle = locked ? vehicles[0] : undefined;
+  const [vehicleId, setVehicleId] = useState(lockedVehicle?.vehicle_id ?? "");
+  const [fuelType, setFuelType] = useState<FuelType>(normalizeFuelType(lockedVehicle?.fuel_type));
 
   const selectedVehicle = vehicles.find((v) => v.vehicle_id === vehicleId);
 
   return (
     <form action={action} className="space-y-6">
-      <input type="hidden" name="return_to" value="add" />
+      <input type="hidden" name="return_to" value={returnTo} />
       <input type="hidden" name="fuel_type" value={fuelType} />
 
-      {/* Vehicle — picking one auto-sets its fuel type */}
-      <div className="space-y-1.5">
-        <Label className="text-base">Vehicle</Label>
-        <Select
-          name="vehicle_id"
-          required
-          value={vehicleId}
-          onChange={(e) => {
-            const id = e.target.value;
-            setVehicleId(id);
-            const v = vehicles.find((veh) => veh.vehicle_id === id);
-            setFuelType(normalizeFuelType(v?.fuel_type));
-          }}
-          className="h-12 text-base"
-        >
-          <option value="" disabled>
-            Vehicle chuno…
-          </option>
-          {vehicles.map((v) => (
-            <option key={v.vehicle_id} value={v.vehicle_id}>
-              {v.registration_no}
-              {v.division ? ` — ${v.division}` : ""}
+      {/* Vehicle — locked shows a label, otherwise a dropdown that auto-sets fuel type */}
+      {lockedVehicle ? (
+        <input type="hidden" name="vehicle_id" value={lockedVehicle.vehicle_id} />
+      ) : (
+        <div className="space-y-1.5">
+          <Label className="text-base">Vehicle</Label>
+          <Select
+            name="vehicle_id"
+            required
+            value={vehicleId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setVehicleId(id);
+              const v = vehicles.find((veh) => veh.vehicle_id === id);
+              setFuelType(normalizeFuelType(v?.fuel_type));
+            }}
+            className="h-12 text-base"
+          >
+            <option value="" disabled>
+              Vehicle chuno…
             </option>
-          ))}
-        </Select>
-      </div>
+            {vehicles.map((v) => (
+              <option key={v.vehicle_id} value={v.vehicle_id}>
+                {v.registration_no}
+                {v.division ? ` — ${v.division}` : ""}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       {/* Fuel type — big segmented buttons, selected one clearly highlighted */}
       <div className="space-y-1.5">
