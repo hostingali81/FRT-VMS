@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp, Edit3, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { LinkButton } from "@/components/ui/button";
+import { Button, DashedButton, LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
@@ -155,7 +155,7 @@ export function VehicleProfileTabs({
       </div>
 
       {/* Tab content */}
-      <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="px-4 py-5 sm:px-6 lg:px-8">
 
         {/* ─── OVERVIEW ─── */}
         {tab === "Overview" && (
@@ -352,18 +352,14 @@ export function VehicleProfileTabs({
 
                     {canManage && (
                       <>
-                        <button
+                        <Button
                           type="button"
+                          variant={isOpen ? "outline" : "secondary"}
+                          className="w-full"
                           onClick={() => setOpenShift(isOpen ? null : shift)}
-                          className={cn(
-                            "w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                            isOpen
-                              ? "border-slate-300 bg-slate-100 text-slate-600"
-                              : "border-slate-200 text-slate-600 hover:bg-slate-50",
-                          )}
                         >
                           {isOpen ? "Cancel" : driver ? "Change Driver" : "Assign Driver"}
-                        </button>
+                        </Button>
 
                         {isOpen && (
                           <form action={replaceDriverAction} className="space-y-3 border-t border-slate-100 pt-3">
@@ -440,7 +436,7 @@ export function VehicleProfileTabs({
                       <button
                         type="button"
                         onClick={() => setShowFuelForm(false)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
                       >
                         <X className="h-3.5 w-3.5" /> Cancel
                       </button>
@@ -457,13 +453,9 @@ export function VehicleProfileTabs({
                   </CardContent>
                 </Card>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowFuelForm(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-white py-4 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
-                >
+                <DashedButton type="button" onClick={() => setShowFuelForm(true)}>
                   <Plus className="h-4 w-4" /> Add Fuel Entry
-                </button>
+                </DashedButton>
               )
             )}
 

@@ -3,6 +3,7 @@
 import { Plus, Save, X } from "lucide-react";
 import { useState } from "react";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { DashedButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import type { LookupData } from "@/lib/types";
@@ -18,14 +19,10 @@ export function DriverForm({
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-3 text-sm font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50"
-      >
+      <DashedButton type="button" onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
         Add New Driver
-      </button>
+      </DashedButton>
     );
   }
 

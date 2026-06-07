@@ -53,7 +53,7 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
         </span>
       </div>
 
-      <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="px-4 py-5 sm:px-6 lg:px-8">
         {entries.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
             <ClipboardList className="mx-auto mb-3 h-8 w-8 text-slate-300" />

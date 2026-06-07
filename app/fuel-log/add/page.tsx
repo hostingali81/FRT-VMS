@@ -36,7 +36,7 @@ export default async function AddFuelEntryPage({
     <AppShell profile={profile}>
       <PageHeader title="Add Fuel Entry" eyebrow="Quick fuel log" backHref="/fuel-log" />
 
-      <div className="mx-auto w-full max-w-xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-xl px-4 py-5 sm:px-6 lg:px-8">
         {searchParams.added && (
           <div className="mb-4 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800">
             <CheckCircle2 className="h-4 w-4" />

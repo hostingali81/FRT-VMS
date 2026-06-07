@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
 import type { VehicleHistoryItem, VehicleStatus } from "@/lib/types";
@@ -202,25 +202,25 @@ function HistoryTable({
                   Showing {start}–{end} of {filtered}
                 </p>
                 <div className="flex items-center gap-1">
-                  <button
+                  <IconButton
+                    size="sm"
                     onClick={() => onPageChange(page - 1)}
                     disabled={page === 1}
                     aria-label="Previous page"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                  </button>
+                  </IconButton>
                   <span className="min-w-[5rem] text-center text-sm text-slate-600">
                     {page} / {totalPages}
                   </span>
-                  <button
+                  <IconButton
+                    size="sm"
                     onClick={() => onPageChange(page + 1)}
                     disabled={page === totalPages}
                     aria-label="Next page"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <ChevronRight className="h-4 w-4" />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
             )}

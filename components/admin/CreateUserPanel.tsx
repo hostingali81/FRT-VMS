@@ -3,6 +3,7 @@
 import { Plus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { DashedButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
 import { ROLE_LABELS } from "@/lib/types";
@@ -19,14 +20,10 @@ export function CreateUserPanel({
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-3 text-sm font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50"
-      >
+      <DashedButton type="button" onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
         Create New User
-      </button>
+      </DashedButton>
     );
   }
 

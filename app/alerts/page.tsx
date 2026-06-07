@@ -57,7 +57,7 @@ export default async function AlertsPage() {
         </div>
       </div>
 
-      <div className="grid gap-5 px-4 py-6 sm:px-6 lg:px-8 xl:grid-cols-3">
+      <div className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8 xl:grid-cols-3">
         <AlertCard icon={AlertTriangle} title="Vehicle Documents" count={documentAlerts.length} expiredCount={expiredDocCount}>
           {sortedDocAlerts.length === 0 ? (
             <ClearState message="All vehicle documents are in order" />

@@ -122,7 +122,7 @@ export default async function FuelDashboardPage({
       </div>
 
       {/* Vehicle table */}
-      <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="px-4 py-5 sm:px-6 lg:px-8">
         {rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
             <Droplets className="mx-auto mb-3 h-8 w-8 text-slate-300" />

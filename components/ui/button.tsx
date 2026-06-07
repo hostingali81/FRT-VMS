@@ -50,3 +50,46 @@ export function LinkButton({ className, variant = "primary", href, ...props }: L
   );
 }
 
+const iconSizes: Record<"sm" | "md", string> = {
+  sm: "h-8 w-8",
+  md: "h-10 w-10",
+};
+
+type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: Variant;
+  size?: "sm" | "md";
+  children: ReactNode;
+};
+
+/** Square, icon-only button (no text). Use for toolbar/pagination/menu controls. */
+export function IconButton({ className, variant = "outline", size = "md", ...props }: IconButtonProps) {
+  return (
+    <button
+      className={cn(
+        "inline-flex items-center justify-center rounded-md border transition focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-40",
+        iconSizes[size],
+        variants[variant],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+type DashedButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  children: ReactNode;
+};
+
+/** Full-width dashed-outline button used to reveal an inline "add" form. */
+export function DashedButton({ className, ...props }: DashedButtonProps) {
+  return (
+    <button
+      className={cn(
+        "flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+

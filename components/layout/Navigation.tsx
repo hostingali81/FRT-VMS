@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth-actions";
+import { IconButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
 const navItems = [
@@ -117,15 +118,15 @@ export function MobileNav({ showAdmin }: { showAdmin: boolean }) {
 
   return (
     <div className="lg:hidden">
-      <button
+      <IconButton
         type="button"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-800"
+        variant="secondary"
         onClick={() => setIsOpen(true)}
         aria-label="Open menu"
         aria-expanded={isOpen}
       >
         <Menu className="h-5 w-5" aria-hidden="true" />
-      </button>
+      </IconButton>
 
       {/* Overlay */}
       {isOpen && (
@@ -148,14 +149,14 @@ export function MobileNav({ showAdmin }: { showAdmin: boolean }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FRT-VMS</p>
             <p className="text-sm font-bold text-slate-950">Imperial Electric</p>
           </div>
-          <button
+          <IconButton
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+            variant="ghost"
             onClick={() => setIsOpen(false)}
             aria-label="Close menu"
           >
             <X className="h-5 w-5" aria-hidden="true" />
-          </button>
+          </IconButton>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
