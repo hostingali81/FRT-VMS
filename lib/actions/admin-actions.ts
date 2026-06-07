@@ -41,8 +41,11 @@ function normalizeScope(role: UserRole, formData: FormData) {
       if (!division) redirect("/admin?error=scope-required");
       return { zone_id: zone, circle_id: circle, division_id: division };
     case "viewer":
-      if (!circle) redirect("/admin?error=scope-required");
-      return { zone_id: zone, circle_id: circle, division_id: null };
+      // Viewer is scoped to exactly one level — keep the most specific provided.
+      if (division) return { zone_id: null, circle_id: null, division_id: division };
+      if (circle) return { zone_id: null, circle_id: circle, division_id: null };
+      if (zone) return { zone_id: zone, circle_id: null, division_id: null };
+      redirect("/admin?error=scope-required");
     default:
       return { zone_id: null, circle_id: null, division_id: null };
   }

@@ -5,7 +5,15 @@ export function accessibleCircleIds(profile: UserProfile, lookups: LookupData) {
     return new Set(lookups.circles.map((circle) => circle.id));
   }
 
-  return new Set(profile.circle_id ? [profile.circle_id] : []);
+  if (profile.circle_id) return new Set([profile.circle_id]);
+
+  // Zone-scoped profile (e.g. a viewer assigned a whole zone): every circle in
+  // that zone is accessible.
+  if (profile.zone_id) {
+    return new Set(lookups.circles.filter((circle) => circle.zone_id === profile.zone_id).map((circle) => circle.id));
+  }
+
+  return new Set<string>();
 }
 
 export function accessibleDivisionIds(profile: UserProfile, lookups: LookupData) {
