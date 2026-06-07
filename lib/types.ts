@@ -218,10 +218,14 @@ export type FuelOwnershipHistoryItem = {
   changed_by: string | null;
 };
 
+export const FUEL_LOG_TYPES = ["CNG", "Petrol", "Diesel"] as const;
+export type FuelLogType = (typeof FUEL_LOG_TYPES)[number];
+
 export type FuelLogEntry = {
   id: string;
   vehicle_id: string;
   log_date: string;
+  fuel_type: FuelLogType | null;
   fuel_litres: number;
   fuel_amount: number | null;
   gps_distance_km: number | null;

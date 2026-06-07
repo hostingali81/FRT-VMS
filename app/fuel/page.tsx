@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Droplets, Plus, RefreshCw } from "lucide-react";
+import { Droplets, Fuel, Plus, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
+import { LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
@@ -56,10 +57,17 @@ export default async function FuelDashboardPage({
   const vehiclesLogged = companyRows.filter((r) => r.logs.length > 0).length;
 
   const isSuperAdmin = profile.role === "super_admin";
+  const canAddFuel = profile.role !== "viewer";
 
   return (
     <AppShell profile={profile}>
       <PageHeader title="Fuel Dashboard" eyebrow="Monthly fuel summary per vehicle">
+        {canAddFuel && (
+          <LinkButton href="/fuel-log/add">
+            <Fuel className="h-4 w-4" aria-hidden="true" />
+            Add Fuel
+          </LinkButton>
+        )}
         {isSuperAdmin && (
           <form action={syncGpsDistanceAction}>
             <SubmitButton variant="outline">

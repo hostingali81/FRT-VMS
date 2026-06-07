@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Fuel } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
+import { LinkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
@@ -29,9 +30,18 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
     return (b.created_at ?? "").localeCompare(a.created_at ?? "");
   });
 
+  const canAddFuel = profile.role !== "viewer";
+
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Fuel Log" eyebrow="Every fuel entry, newest first" />
+      <PageHeader title="Fuel Log" eyebrow="Every fuel entry, newest first">
+        {canAddFuel && (
+          <LinkButton href="/fuel-log/add">
+            <Fuel className="h-4 w-4" aria-hidden="true" />
+            Add Fuel
+          </LinkButton>
+        )}
+      </PageHeader>
 
       <MonthNavigator basePath="/fuel-log" yearMonth={yearMonth} />
 
@@ -55,12 +65,13 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] divide-y divide-slate-200 text-sm">
+              <table className="w-full min-w-[840px] divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-5 py-3">Date</th>
                     <th className="px-5 py-3">Vehicle</th>
                     <th className="px-5 py-3">Location</th>
+                    <th className="px-5 py-3">Type</th>
                     <th className="px-5 py-3 text-right">Litres</th>
                     <th className="px-5 py-3 text-right">Amount</th>
                     <th className="px-5 py-3 text-right">KM (GPS)</th>
@@ -101,6 +112,7 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
                             "—"
                           )}
                         </td>
+                        <td className="px-5 py-3.5 text-slate-600">{log.fuel_type ?? "—"}</td>
                         <td className="px-5 py-3.5 text-right font-medium text-slate-900">{log.fuel_litres} L</td>
                         <td className="px-5 py-3.5 text-right text-slate-700">
                           {log.fuel_amount != null ? `₹${log.fuel_amount.toLocaleString("en-IN")}` : "—"}

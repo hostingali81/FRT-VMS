@@ -270,23 +270,32 @@ export async function addFuelLogAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
   const rawData = Object.fromEntries(formData.entries());
-  const validated = fuelLogSchema.safeParse(rawData);
+  // "add" → dedicated /fuel-log/add page; otherwise the in-profile Fuel Logs tab
+  const fromAddPage = formData.get("return_to") === "add";
+  const errorBack = (msg: string) =>
+    fromAddPage
+      ? `/fuel-log/add?error=${encodeURIComponent(msg)}`
+      : `/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(msg)}&tab=Fuel+Logs`;
 
+  const validated = fuelLogSchema.safeParse(rawData);
   if (!validated.success) {
-    const error = validated.error.issues[0].message;
-    redirect(`/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(error)}&tab=Fuel+Logs`);
+    redirect(errorBack(validated.error.issues[0].message));
   }
 
   const data = validated.data;
   const vehicle = await getVehicle(data.vehicle_id, profile);
-  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
-
-  if (vehicle.fuel_ownership !== "company") throw new Error("Fuel logs can only be added for company-owned vehicles");
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) {
+    redirect(errorBack("You don't have access to this vehicle"));
+  }
+  if (vehicle.fuel_ownership !== "company") {
+    redirect(errorBack("Fuel entries are only for company-fuel vehicles"));
+  }
 
   const supabase = requireAdminClient();
   const { error } = await supabase.from("vehicle_fuel_logs").insert({
     vehicle_id: data.vehicle_id,
     log_date: data.log_date,
+    fuel_type: data.fuel_type,
     fuel_litres: data.fuel_litres,
     fuel_amount: data.fuel_amount ?? null,
     recorded_by: profile.name,
@@ -297,7 +306,12 @@ export async function addFuelLogAction(formData: FormData) {
 
   revalidatePath(`/vehicles/${data.vehicle_id}`);
   revalidatePath("/fuel");
-  redirect(`/vehicles/${data.vehicle_id}?fuellog=1&tab=Fuel+Logs`);
+  revalidatePath("/fuel-log");
+  redirect(
+    fromAddPage
+      ? `/fuel-log/add?added=${encodeURIComponent(vehicle.registration_no)}`
+      : `/vehicles/${data.vehicle_id}?fuellog=1&tab=Fuel+Logs`,
+  );
 }
 
 export async function createDriverAction(formData: FormData) {

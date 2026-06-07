@@ -108,6 +108,9 @@ export function VehicleProfileTabs({
 
   const isCompany = vehicle.fuel_ownership === "company";
   const canAddFuelLog = canManage && isCompany;
+  const defaultFuelType = ["CNG", "Petrol", "Diesel"].includes(vehicle.fuel_type ?? "")
+    ? (vehicle.fuel_type as string)
+    : "Diesel";
 
   return (
     <div>
@@ -464,6 +467,15 @@ export function VehicleProfileTabs({
                       </div>
 
                       <div className="space-y-1.5">
+                        <Label>Fuel Type *</Label>
+                        <Select name="fuel_type" defaultValue={defaultFuelType} required>
+                          <option value="Diesel">Diesel</option>
+                          <option value="Petrol">Petrol</option>
+                          <option value="CNG">CNG</option>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
                         <Label>Fuel Filled (Litres) *</Label>
                         <Input
                           name="fuel_litres"
@@ -532,10 +544,11 @@ export function VehicleProfileTabs({
                 </CardContent>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] divide-y divide-slate-200 text-sm">
+                  <table className="w-full min-w-[700px] divide-y divide-slate-200 text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <tr>
                         <th className="px-5 py-3">Date</th>
+                        <th className="px-5 py-3">Type</th>
                         <th className="px-5 py-3">Litres</th>
                         <th className="px-5 py-3">Amount</th>
                         <th className="px-5 py-3">KM (GPS)</th>
@@ -548,6 +561,7 @@ export function VehicleProfileTabs({
                       {fuelLogsWithDerived.map((log) => (
                         <tr key={log.id} className="hover:bg-slate-50">
                           <td className="px-5 py-3.5 font-medium text-slate-900">{formatDate(log.log_date)}</td>
+                          <td className="px-5 py-3.5 text-slate-600">{log.fuel_type ?? "—"}</td>
                           <td className="px-5 py-3.5 text-slate-700">{log.fuel_litres} L</td>
                           <td className="px-5 py-3.5 text-slate-700">
                             {log.fuel_amount != null ? `₹${log.fuel_amount.toLocaleString("en-IN")}` : "—"}

@@ -57,6 +57,7 @@ export const fuelOwnershipSchema = z.object({
 export const fuelLogSchema = z.object({
   vehicle_id: z.string().uuid(),
   log_date: z.string().min(1, "Date is required"),
+  fuel_type: z.enum(["CNG", "Petrol", "Diesel"], { message: "Select a fuel type" }),
   fuel_litres: z.preprocess(
     (v) => (v === "" || v == null ? undefined : Number(v)),
     z.number().positive("Litres must be greater than 0"),
