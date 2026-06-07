@@ -6,11 +6,14 @@ export function PageHeader({
   title,
   eyebrow,
   backHref,
+  badge,
   children,
 }: {
   title: string;
   eyebrow?: string;
   backHref?: string;
+  /** Status indicator shown beside the title (e.g. a StatusBadge), kept out of the action row. */
+  badge?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -29,10 +32,13 @@ export function PageHeader({
           {eyebrow ? (
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
           ) : null}
-          <h1 className="mt-1 break-words text-xl font-semibold text-slate-950 sm:text-2xl">{title}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h1 className="break-words text-xl font-semibold text-slate-950 sm:text-2xl">{title}</h1>
+            {badge}
+          </div>
         </div>
         {children ? (
-          <div className="flex w-full flex-wrap gap-2 [&>a]:flex-1 [&>button]:flex-1 sm:w-auto sm:[&>a]:flex-none sm:[&>button]:flex-none">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center [&>a]:w-full [&>button]:w-full sm:[&>a]:w-auto sm:[&>button]:w-auto">
             {children}
           </div>
         ) : null}

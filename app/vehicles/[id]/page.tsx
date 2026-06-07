@@ -77,8 +77,8 @@ export default async function VehicleProfilePage({
         title={vehicle.registration_no}
         eyebrow={`${vehicle.current_circle ?? vehicle.home_circle} / ${vehicle.division ?? "Unassigned"} / ${vehicle.substation ?? "Unassigned"}`}
         backHref="/vehicles"
+        badge={<StatusBadge status={vehicle.status} />}
       >
-        <StatusBadge status={vehicle.status} />
         {canManageVehicle ? (
           <LinkButton href={`/vehicles/${vehicle.vehicle_id}/edit`} variant="outline">
             <Edit3 className="h-4 w-4" aria-hidden="true" />
