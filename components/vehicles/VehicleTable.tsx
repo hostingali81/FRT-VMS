@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form";
+import { Badge } from "@/components/ui/badge";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { FleetVehicle, LookupData } from "@/lib/types";
@@ -222,6 +223,8 @@ export function VehicleTable({
                   Substation: vehicle.substation,
                   Status: vehicle.status,
                   Vendor: vehicle.vendor_name,
+                  "Fuel By": vehicle.fuel_ownership === "vendor" ? "Vendor" : "Company",
+                  "Driver By": vehicle.driver_ownership === "vendor" ? "Vendor" : "Company",
                 })),
               )
             }
@@ -232,15 +235,18 @@ export function VehicleTable({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[1180px] w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1480px] w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-3">Reg No</th>
               <th className="px-5 py-3">Type</th>
+              <th className="px-5 py-3">Vendor</th>
               <th className="px-5 py-3">Circle</th>
               <th className="px-5 py-3">Division</th>
               <th className="px-5 py-3">Substation</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Fuel By</th>
+              <th className="px-5 py-3">Driver By</th>
               <th className="px-5 py-3">GPS</th>
               <th className="px-5 py-3">Doc Status</th>
               <th className="px-5 py-3 text-right">Actions</th>
@@ -264,11 +270,22 @@ export function VehicleTable({
                     </Link>
                   </td>
                   <td data-label="Type" className="px-5 py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
+                  <td data-label="Vendor" className="px-5 py-4 text-slate-600">{vehicle.vendor_name ?? "—"}</td>
                   <td data-label="Circle" className="px-5 py-4 text-slate-600">{vehicle.current_circle ?? vehicle.home_circle}</td>
                   <td data-label="Division" className="px-5 py-4 text-slate-600">{vehicle.division ?? "Unassigned"}</td>
                   <td data-label="Substation" className="px-5 py-4 text-slate-600">{vehicle.substation ?? "Unassigned"}</td>
                   <td data-label="Status" className="px-5 py-4">
                     <StatusBadge status={vehicle.status} />
+                  </td>
+                  <td data-label="Fuel By" className="px-5 py-4">
+                    <Badge tone={vehicle.fuel_ownership === "vendor" ? "yellow" : "blue"}>
+                      {vehicle.fuel_ownership === "vendor" ? "Vendor" : "Company"}
+                    </Badge>
+                  </td>
+                  <td data-label="Driver By" className="px-5 py-4">
+                    <Badge tone={vehicle.driver_ownership === "vendor" ? "yellow" : "blue"}>
+                      {vehicle.driver_ownership === "vendor" ? "Vendor" : "Company"}
+                    </Badge>
                   </td>
                   <td data-label="GPS" className="px-5 py-4 text-slate-600">{vehicle.gps_device_id ?? "Not set"}</td>
                   <td data-label="Document Status" className="px-5 py-4">

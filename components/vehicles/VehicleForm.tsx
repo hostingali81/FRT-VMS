@@ -57,10 +57,18 @@ export function VehicleForm({
             </Select>
           </Field>
           {!vehicle ? (
-            <Field label="Fuel Ownership">
+            <Field label="Fuel By">
               <Select name="fuel_ownership" defaultValue="company">
                 <option value="company">Company Fuel</option>
                 <option value="vendor">Vendor Fuel</option>
+              </Select>
+            </Field>
+          ) : null}
+          {!vehicle ? (
+            <Field label="Driver By">
+              <Select name="driver_ownership" defaultValue="company">
+                <option value="company">Company Driver</option>
+                <option value="vendor">Vendor Driver</option>
               </Select>
             </Field>
           ) : null}

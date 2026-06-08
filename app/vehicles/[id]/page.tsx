@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { VehicleProfileTabs } from "@/components/vehicles/VehicleProfileTabs";
 import {
   addFuelLogAction,
+  changeDriverOwnershipAction,
   changeFuelOwnershipAction,
   changeVehicleStatusAction,
   replaceDriverAssignmentAction,
@@ -14,6 +15,7 @@ import {
 import { requireProfile } from "@/lib/auth";
 import {
   getDriverAssignments,
+  getDriverOwnershipHistory,
   getDrivers,
   getFuelLogs,
   getFuelOwnershipHistory,
@@ -34,6 +36,7 @@ const VALID_TABS = [
   "Status History",
   "Fuel History",
   "Driver History",
+  "Driver Source",
   "Documents",
 ] as const;
 
@@ -56,13 +59,14 @@ export default async function VehicleProfilePage({
   const vehicle = await getVehicle(params.id, profile);
   if (!vehicle) notFound();
 
-  const [drivers, transfers, statusHistory, fuelLogs, fuelOwnershipHistory, availableDrivers, lookups] =
+  const [drivers, transfers, statusHistory, fuelLogs, fuelOwnershipHistory, driverOwnershipHistory, availableDrivers, lookups] =
     await Promise.all([
       getDriverAssignments(vehicle.vehicle_id, profile),
       getVehicleTransfers(vehicle.vehicle_id, profile),
       getStatusHistory(vehicle.vehicle_id, profile),
       getFuelLogs(vehicle.vehicle_id, profile),
       getFuelOwnershipHistory(vehicle.vehicle_id, profile),
+      getDriverOwnershipHistory(vehicle.vehicle_id, profile),
       getDrivers(profile),
       getLookups(profile),
     ]);
@@ -99,11 +103,13 @@ export default async function VehicleProfilePage({
         statusHistory={statusHistory}
         fuelLogs={fuelLogs}
         fuelOwnershipHistory={fuelOwnershipHistory}
+        driverOwnershipHistory={driverOwnershipHistory}
         availableDrivers={availableDrivers}
         canManage={canManageVehicle}
         defaultTab={defaultTab}
         changeStatusAction={changeVehicleStatusAction}
         changeFuelOwnershipAction={changeFuelOwnershipAction}
+        changeDriverOwnershipAction={changeDriverOwnershipAction}
         replaceDriverAction={replaceDriverAssignmentAction}
         addFuelLogAction={addFuelLogAction}
       />

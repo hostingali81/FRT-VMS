@@ -4,6 +4,7 @@ import {
   buildDivisionSummaries,
   mockActivity,
   mockDriverAssignments,
+  mockDriverOwnershipHistory,
   mockDrivers,
   mockFuelLogs,
   mockFuelOwnershipHistory,
@@ -23,6 +24,7 @@ import {
   type Division,
   type DivisionSummary,
   type DriverAssignment,
+  type DriverOwnershipHistoryItem,
   type DriverRecord,
   type DriverShift,
   type FleetVehicle,
@@ -324,6 +326,28 @@ export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserP
     return [];
   }
   return (data ?? []) as FuelOwnershipHistoryItem[];
+}
+
+export async function getDriverOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<DriverOwnershipHistoryItem[]> {
+  if (profile) {
+    const vehicle = await getVehicle(vehicleId, profile);
+    if (!vehicle) return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockDriverOwnershipHistory.filter((row) => row.vehicle_id === vehicleId);
+
+  const { data, error } = await supabase
+    .from("vehicle_driver_ownership_history")
+    .select("*")
+    .eq("vehicle_id", vehicleId)
+    .order("from_date", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getDriverOwnershipHistory failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as DriverOwnershipHistoryItem[];
 }
 
 export async function getFuelLogs(vehicleId: string, profile?: UserProfile | null): Promise<FuelLogEntry[]> {

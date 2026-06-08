@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { QuickFuelForm } from "@/components/fuel/QuickFuelForm";
 import type {
   DriverAssignment,
+  DriverOwnershipHistoryItem,
   DriverRecord,
   FleetVehicle,
   FuelLogEntry,
@@ -23,7 +24,7 @@ import type {
 import { formatDate, titleCase } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
-type QuickAction = "status" | "fuel" | null;
+type QuickAction = "status" | "fuel" | "driver" | null;
 type ShiftKey = "shift_a" | "shift_b" | "shift_c";
 
 const TABS = [
@@ -34,6 +35,7 @@ const TABS = [
   "Status History",
   "Fuel History",
   "Driver History",
+  "Driver Source",
   "Documents",
 ] as const;
 type TabName = (typeof TABS)[number];
@@ -45,11 +47,13 @@ export function VehicleProfileTabs({
   statusHistory,
   fuelLogs,
   fuelOwnershipHistory,
+  driverOwnershipHistory,
   availableDrivers,
   canManage,
   defaultTab,
   changeStatusAction,
   changeFuelOwnershipAction,
+  changeDriverOwnershipAction,
   replaceDriverAction,
   addFuelLogAction,
 }: {
@@ -59,11 +63,13 @@ export function VehicleProfileTabs({
   statusHistory: StatusHistoryItem[];
   fuelLogs: FuelLogEntry[];
   fuelOwnershipHistory: FuelOwnershipHistoryItem[];
+  driverOwnershipHistory: DriverOwnershipHistoryItem[];
   availableDrivers: DriverRecord[];
   canManage: boolean;
   defaultTab?: TabName;
   changeStatusAction: (formData: FormData) => Promise<void>;
   changeFuelOwnershipAction: (formData: FormData) => Promise<void>;
+  changeDriverOwnershipAction: (formData: FormData) => Promise<void>;
   replaceDriverAction: (formData: FormData) => Promise<void>;
   addFuelLogAction: (formData: FormData) => Promise<void>;
 }) {
@@ -182,9 +188,14 @@ export function VehicleProfileTabs({
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
                   <Field label="Type">{vehicle.vehicle_type ?? "—"}</Field>
                   <Field label="Fuel Type">{vehicle.fuel_type ?? "—"}</Field>
-                  <Field label="Fuel Ownership">
+                  <Field label="Fuel By">
                     <Badge tone={vehicle.fuel_ownership === "vendor" ? "yellow" : "blue"}>
                       {vehicle.fuel_ownership === "vendor" ? "Vendor Fuel" : "Company Fuel"}
+                    </Badge>
+                  </Field>
+                  <Field label="Driver By">
+                    <Badge tone={vehicle.driver_ownership === "vendor" ? "yellow" : "blue"}>
+                      {vehicle.driver_ownership === "vendor" ? "Vendor Driver" : "Company Driver"}
                     </Badge>
                   </Field>
                   <Field label="Status">
@@ -303,6 +314,45 @@ export function VehicleProfileTabs({
                               <Select name="ownership" defaultValue={vehicle.fuel_ownership} required>
                                 <option value="company">Company Fuel</option>
                                 <option value="vendor">Vendor Fuel</option>
+                              </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Effective Date</Label>
+                              <Input name="from_date" type="date" defaultValue={today} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Remarks</Label>
+                              <Textarea name="remarks" />
+                            </div>
+                            <SubmitButton className="w-full">Save</SubmitButton>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Change Driver Source accordion */}
+                    <div className="overflow-hidden rounded-md border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setOpenAction(openAction === "driver" ? null : "driver")}
+                        className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Change Driver Source
+                        {openAction === "driver" ? (
+                          <ChevronUp className="h-4 w-4 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-slate-400" />
+                        )}
+                      </button>
+                      {openAction === "driver" && (
+                        <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                          <form action={changeDriverOwnershipAction} className="space-y-3">
+                            <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
+                            <div className="space-y-1.5">
+                              <Label>Driver By</Label>
+                              <Select name="ownership" defaultValue={vehicle.driver_ownership} required>
+                                <option value="company">Company Driver</option>
+                                <option value="vendor">Vendor Driver</option>
                               </Select>
                             </div>
                             <div className="space-y-1.5">
@@ -597,6 +647,30 @@ export function VehicleProfileTabs({
                     id: item.id,
                     date: item.from_date,
                     title: item.ownership === "vendor" ? "Vendor Fuel" : "Company Fuel",
+                    description: [
+                      item.remarks ?? "No remarks",
+                      item.to_date ? `Until ${formatDate(item.to_date)}` : "Current",
+                    ].join(" · "),
+                    badge: item.changed_by ?? undefined,
+                  }))}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ─── DRIVER SOURCE (ownership changes) ─── */}
+        {tab === "Driver Source" && (
+          <Card>
+            <CardContent className="pt-6">
+              {driverOwnershipHistory.length === 0 ? (
+                <EmptyState message="No driver source changes recorded yet" />
+              ) : (
+                <Timeline
+                  items={driverOwnershipHistory.map((item) => ({
+                    id: item.id,
+                    date: item.from_date,
+                    title: item.ownership === "vendor" ? "Vendor Driver" : "Company Driver",
                     description: [
                       item.remarks ?? "No remarks",
                       item.to_date ? `Until ${formatDate(item.to_date)}` : "Current",

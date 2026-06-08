@@ -76,19 +76,21 @@ export function canTransferVehicle(profile: UserProfile, vehicle: FleetVehicle, 
   const fromCircleId = vehicle.current_circle_id ?? vehicle.home_circle_id;
   const isCrossCircle = Boolean(fromCircleId && toCircleId && fromCircleId !== toCircleId);
 
+  // Cross-circle moves are reserved for admins (zonal_manager) and super_admin only.
   if (isCrossCircle) {
     return profile.role === "zonal_manager" && canSeeCircle(profile, fromCircleId, lookups) && canSeeCircle(profile, toCircleId, lookups);
   }
 
+  // Circle incharge can only move vehicles within their own circle.
+  // Division incharge cannot transfer/relocate vehicles at all.
   if (profile.role === "circle_incharge") return canSeeCircle(profile, fromCircleId, lookups);
-  if (profile.role === "division_incharge") return canSeeDivision(profile, vehicle.division_id, lookups);
 
   return false;
 }
 
 export function canInitiateTransfer(profile: UserProfile, vehicle: FleetVehicle, lookups: LookupData) {
   if (!canSeeVehicle(profile, vehicle, lookups)) return false;
-  return ["super_admin", "zonal_manager", "circle_incharge", "division_incharge"].includes(profile.role);
+  return ["super_admin", "zonal_manager", "circle_incharge"].includes(profile.role);
 }
 
 export function canAccessLocation(profile: UserProfile, location: { circleId?: string | null; divisionId?: string | null }, lookups: LookupData) {

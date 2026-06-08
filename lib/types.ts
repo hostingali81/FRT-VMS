@@ -9,6 +9,7 @@ export const VEHICLE_STATUSES = [
 
 export const DRIVER_SHIFTS = ["shift_a", "shift_b", "shift_c"] as const;
 export const FUEL_OWNERSHIPS = ["company", "vendor"] as const;
+export const DRIVER_OWNERSHIPS = ["company", "vendor"] as const;
 export const USER_ROLES = [
   "super_admin",
   "zonal_manager",
@@ -28,6 +29,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export type VehicleStatus = (typeof VEHICLE_STATUSES)[number];
 export type DriverShift = (typeof DRIVER_SHIFTS)[number];
 export type FuelOwnership = (typeof FUEL_OWNERSHIPS)[number];
+export type DriverOwnership = (typeof DRIVER_OWNERSHIPS)[number];
 export type UserRole = (typeof USER_ROLES)[number];
 
 export type Zone = {
@@ -86,6 +88,7 @@ export type FleetVehicle = {
   vehicle_type: string | null;
   fuel_type: string | null;
   fuel_ownership: FuelOwnership;
+  driver_ownership: DriverOwnership;
   model_year: number | null;
   owner_name: string | null;
   owner_mobile: string | null;
@@ -212,6 +215,16 @@ export type FuelOwnershipHistoryItem = {
   id: string;
   vehicle_id: string;
   ownership: FuelOwnership;
+  remarks: string | null;
+  from_date: string;
+  to_date: string | null;
+  changed_by: string | null;
+};
+
+export type DriverOwnershipHistoryItem = {
+  id: string;
+  vehicle_id: string;
+  ownership: DriverOwnership;
   remarks: string | null;
   from_date: string;
   to_date: string | null;
