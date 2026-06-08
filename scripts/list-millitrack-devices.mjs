@@ -1,34 +1,48 @@
 /**
  * Lists all Millitrack devices for GPS-device-ID mapping.
  * Run: node --env-file=.env.local scripts/list-millitrack-devices.mjs
+ *   or: MT_USERNAME="imperial.barabanki" MT_PASSWORD="..." node scripts/list-millitrack-devices.mjs
  *
  * "Device ID" column → paste this numeric id into each vehicle's GPS Device ID field.
  * "Registration" is the first token of the device name (the plate the device reports).
+ *
+ * Uses the Android API (track4.millitrack.com) with auto-login — same as lib/millitrack.ts.
  */
 
-const BASE = process.env.MT_BASE_URL ?? "https://mvts4.millitrack.com";
+const BASE = process.env.MT_BASE_URL ?? "http://track4.millitrack.com";
+const APP_ID = "in.vehiclestep.vehiclesteppro.gpstracker";
+
+async function login() {
+  if (process.env.MT_TOKEN) return process.env.MT_TOKEN;
+  const username = process.env.MT_USERNAME || process.env.MT_EMAIL;
+  const password = process.env.MT_PASSWORD;
+  if (!username || !password) {
+    console.error("MT_USERNAME (or MT_EMAIL) / MT_PASSWORD not loaded. Run with: node --env-file=.env.local scripts/list-millitrack-devices.mjs");
+    process.exit(1);
+  }
+  const url = `${BASE}/api/session?app=${encodeURIComponent(APP_ID)}&dc=${Date.now()}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({ username, password }),
+  });
+  if (!res.ok) {
+    console.error(`Login failed: ${res.status}`);
+    process.exit(1);
+  }
+  const data = await res.json().catch(() => null);
+  if (!data?.token) {
+    console.error("Login OK but no token in response");
+    process.exit(1);
+  }
+  return data.token;
+}
 
 async function main() {
-  const email = process.env.MT_EMAIL;
-  const password = process.env.MT_PASSWORD;
-  if (!email || !password) {
-    console.error("MT_EMAIL / MT_PASSWORD not loaded. Run with: node --env-file=.env.local scripts/list-millitrack-devices.mjs");
-    process.exit(1);
-  }
-
-  const loginRes = await fetch(`${BASE}/api/session`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ email, password }),
-  });
-  if (!loginRes.ok) {
-    console.error(`Login failed: ${loginRes.status}`);
-    process.exit(1);
-  }
-  const cookie = (loginRes.headers.get("set-cookie") ?? "").split(";")[0];
+  const token = await login();
 
   const devRes = await fetch(`${BASE}/api/devices`, {
-    headers: { Accept: "application/json", Cookie: cookie },
+    headers: { Accept: "application/json", "x-auth-token": token },
   });
   if (!devRes.ok) {
     console.error(`/api/devices failed: ${devRes.status}`);
