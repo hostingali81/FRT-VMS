@@ -61,6 +61,7 @@ export function VehicleTable({
       const matchesSearch =
         !q ||
         vehicle.registration_no?.toLowerCase().includes(q) ||
+        vehicle.frt_no?.toLowerCase().includes(q) ||
         vehicle.vehicle_type?.toLowerCase().includes(q) ||
         vehicle.vendor_name?.toLowerCase().includes(q) ||
         vehicle.current_circle?.toLowerCase().includes(q) ||
@@ -147,7 +148,7 @@ export function VehicleTable({
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             <Input
               type="search"
-              placeholder="Search by reg no, type, circle, vendor…"
+              placeholder="Search by FRT no, reg no, type, circle, vendor…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -216,6 +217,7 @@ export function VehicleTable({
               exportRows(
                 "frt-vehicles",
                 filtered.map((vehicle) => ({
+                  "FRT No": vehicle.frt_no,
                   Registration: vehicle.registration_no,
                   Type: vehicle.vehicle_type,
                   Circle: vehicle.current_circle,
@@ -235,9 +237,10 @@ export function VehicleTable({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[1480px] w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1560px] w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-5 py-3">FRT No</th>
               <th className="px-5 py-3">Reg No</th>
               <th className="px-5 py-3">Type</th>
               <th className="px-5 py-3">Vendor</th>
@@ -264,6 +267,9 @@ export function VehicleTable({
 
               return (
                 <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
+                  <td data-label="FRT No" className="whitespace-nowrap px-5 py-4 font-semibold text-slate-700">
+                    {vehicle.frt_no ?? "—"}
+                  </td>
                   <td data-label="Registration No" className="whitespace-nowrap px-5 py-4 font-semibold text-slate-950">
                     <Link href={`/vehicles/${vehicle.vehicle_id}`} className="hover:underline">
                       {vehicle.registration_no}

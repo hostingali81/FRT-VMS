@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const vehicleSchema = z.object({
   registration_no: z.string().min(4, "Registration number is too short").max(15).toUpperCase(),
+  frt_no: z.string().optional().nullable(),
   vehicle_type: z.string().min(1, "Vehicle type is required"),
   fuel_type: z.enum(["Diesel", "Petrol", "CNG", "EV"]),
   fuel_ownership: z.enum(["company", "vendor"]).default("company"),

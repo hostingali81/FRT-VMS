@@ -76,6 +76,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-ab-1245",
     registration_no: "UP32 AB 1245",
+    frt_no: null,
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -106,6 +107,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-cd-8831",
     registration_no: "UP32 CD 8831",
+    frt_no: null,
     vehicle_type: "Pickup",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -136,6 +138,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up41-af-5521",
     registration_no: "UP41 AF 5521",
+    frt_no: null,
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -166,6 +169,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up41-gh-7712",
     registration_no: "UP41 GH 7712",
+    frt_no: null,
     vehicle_type: "Scorpio",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -196,6 +200,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-jk-9088",
     registration_no: "UP32 JK 9088",
+    frt_no: null,
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -226,6 +231,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-lk-4201",
     registration_no: "UP32 LK 4201",
+    frt_no: null,
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",

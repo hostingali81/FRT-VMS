@@ -45,6 +45,9 @@ export function VehicleForm({
           <Field label="Registration No">
             <Input name="registration_no" placeholder="UP32 AB 1234" defaultValue={vehicle?.registration_no ?? ""} required />
           </Field>
+          <Field label="FRT No">
+            <Input name="frt_no" placeholder="FRT 1" defaultValue={vehicle?.frt_no ?? ""} />
+          </Field>
           <Field label="Vehicle Type">
             <Input name="vehicle_type" placeholder="Bolero" defaultValue={vehicle?.vehicle_type ?? ""} />
           </Field>

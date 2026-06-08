@@ -186,6 +186,7 @@ export function VehicleProfileTabs({
               </CardHeader>
               <CardContent>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+                  <Field label="FRT No">{vehicle.frt_no ?? "—"}</Field>
                   <Field label="Type">{vehicle.vehicle_type ?? "—"}</Field>
                   <Field label="Fuel Type">{vehicle.fuel_type ?? "—"}</Field>
                   <Field label="Fuel By">

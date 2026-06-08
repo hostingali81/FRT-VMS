@@ -85,6 +85,7 @@ export type AdminUserRow = UserProfile & {
 export type FleetVehicle = {
   vehicle_id: string;
   registration_no: string;
+  frt_no: string | null;
   vehicle_type: string | null;
   fuel_type: string | null;
   fuel_ownership: FuelOwnership;

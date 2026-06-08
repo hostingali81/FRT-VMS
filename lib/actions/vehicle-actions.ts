@@ -45,6 +45,7 @@ export async function createVehicleAction(formData: FormData) {
     .insert({
       ...data,
       registration_no: data.registration_no.toUpperCase(),
+      frt_no: data.frt_no || null,
       model_year: data.model_year || null,
       insurance_expiry: data.insurance_expiry || null,
       fitness_expiry: data.fitness_expiry || null,

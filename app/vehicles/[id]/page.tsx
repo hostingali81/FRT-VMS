@@ -79,7 +79,7 @@ export default async function VehicleProfilePage({
     <AppShell profile={profile}>
       <PageHeader
         title={vehicle.registration_no}
-        eyebrow={`${vehicle.current_circle ?? vehicle.home_circle} / ${vehicle.division ?? "Unassigned"} / ${vehicle.substation ?? "Unassigned"}`}
+        eyebrow={`${vehicle.frt_no ? `${vehicle.frt_no} · ` : ""}${vehicle.current_circle ?? vehicle.home_circle} / ${vehicle.division ?? "Unassigned"} / ${vehicle.substation ?? "Unassigned"}`}
         backHref="/vehicles"
         badge={<StatusBadge status={vehicle.status} />}
       >
