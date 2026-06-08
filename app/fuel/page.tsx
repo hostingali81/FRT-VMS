@@ -180,7 +180,10 @@ export default async function FuelDashboardPage({
                         </td>
                         <td className="px-5 py-3.5 text-slate-600">
                           <span className="block">{vehicle.division ?? "Unassigned"}</span>
-                          <span className="text-xs text-slate-400">{vehicle.substation ?? "—"}</span>
+                          <span className="text-xs text-slate-400">
+                            {vehicle.substation ?? "—"}
+                            {vehicle.frt_no ? ` (${vehicle.frt_no})` : ""}
+                          </span>
                         </td>
                         <td className="px-5 py-3.5">
                           <Badge tone={isCompany ? "blue" : "yellow"}>
