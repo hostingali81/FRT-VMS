@@ -303,7 +303,7 @@ export function VehicleTable({
                       {vehicle.driver_ownership === "vendor" ? "Vendor" : "Company"}
                     </Badge>
                   </td>
-                  <td data-label="GPS" className="px-5 py-4 text-slate-600">{vehicle.gps_device_id ?? "Not set"}</td>
+                  <td data-label="GPS" className="px-5 py-4 text-slate-600">{vehicle.gps_company ?? "Not set"}</td>
                   <td data-label="Document Status" className="px-5 py-4">
                     <ExpiryBadge date={date} />
                   </td>
