@@ -32,6 +32,7 @@ import {
   type FuelOwnershipHistoryItem,
   type LookupData,
   type StatusHistoryItem,
+  type GpsDistanceMonth,
   type Substation,
   type TransferRecord,
   type UserProfile,
@@ -304,6 +305,28 @@ export async function getStatusHistory(vehicleId: string, profile?: UserProfile 
     return [];
   }
   return (data ?? []) as StatusHistoryItem[];
+}
+
+export async function getGpsDistanceHistory(vehicleId: string, profile?: UserProfile | null): Promise<GpsDistanceMonth[]> {
+  if (profile) {
+    const vehicle = await getVehicle(vehicleId, profile);
+    if (!vehicle) return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("vehicle_gps_distance")
+    .select("*")
+    .eq("vehicle_id", vehicleId)
+    .order("year_month", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getGpsDistanceHistory failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as GpsDistanceMonth[];
 }
 
 export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<FuelOwnershipHistoryItem[]> {

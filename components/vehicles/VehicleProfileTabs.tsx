@@ -18,6 +18,7 @@ import type {
   FleetVehicle,
   FuelLogEntry,
   FuelOwnershipHistoryItem,
+  GpsDistanceMonth,
   StatusHistoryItem,
   TransferRecord,
 } from "@/lib/types";
@@ -31,6 +32,7 @@ const TABS = [
   "Overview",
   "Drivers",
   "Fuel Logs",
+  "GPS Distance",
   "Transfers",
   "Status History",
   "Fuel History",
@@ -46,6 +48,7 @@ export function VehicleProfileTabs({
   transfers,
   statusHistory,
   fuelLogs,
+  gpsDistance,
   fuelOwnershipHistory,
   driverOwnershipHistory,
   availableDrivers,
@@ -62,6 +65,7 @@ export function VehicleProfileTabs({
   transfers: TransferRecord[];
   statusHistory: StatusHistoryItem[];
   fuelLogs: FuelLogEntry[];
+  gpsDistance: GpsDistanceMonth[];
   fuelOwnershipHistory: FuelOwnershipHistoryItem[];
   driverOwnershipHistory: DriverOwnershipHistoryItem[];
   availableDrivers: DriverRecord[];
@@ -585,6 +589,73 @@ export function VehicleProfileTabs({
           </div>
         )}
 
+        {/* ─── GPS DISTANCE ─── */}
+        {tab === "GPS Distance" && (
+          <div className="space-y-5">
+            {!hasGpsDevice && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-4">
+                <p className="text-sm font-semibold text-amber-800">No GPS device mapped</p>
+                <p className="mt-1 text-sm text-amber-700">
+                  Is vehicle ka GPS Device ID set nahi hai — monthly distance track nahi hoga. Vehicle edit
+                  karke device map karein.
+                </p>
+              </div>
+            )}
+
+            {gpsDistance.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <FuelStat label="Months tracked" value={String(gpsDistance.length)} />
+                <FuelStat
+                  label={`Latest (${formatYearMonth(gpsDistance[0].year_month)})`}
+                  value={`${gpsDistance[0].distance_km.toLocaleString("en-IN")} km`}
+                />
+                <FuelStat
+                  label="Total distance"
+                  value={`${gpsDistance.reduce((s, r) => s + r.distance_km, 0).toLocaleString("en-IN")} km`}
+                />
+              </div>
+            )}
+
+            <Card className="overflow-hidden">
+              <CardHeader>
+                <CardTitle>Monthly Distance</CardTitle>
+              </CardHeader>
+              {gpsDistance.length === 0 ? (
+                <CardContent className="py-8">
+                  <EmptyState
+                    message={
+                      hasGpsDevice
+                        ? "No GPS distance yet. Run Sync GPS Distance from the Fuel page (or it auto-syncs daily)."
+                        : "No GPS device mapped for this vehicle."
+                    }
+                  />
+                </CardContent>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">Month</th>
+                        <th className="px-5 py-3">Distance</th>
+                        <th className="px-5 py-3">Last synced</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {gpsDistance.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50">
+                          <td className="px-5 py-3.5 font-medium text-slate-900">{formatYearMonth(row.year_month)}</td>
+                          <td className="px-5 py-3.5 text-slate-700">{row.distance_km.toLocaleString("en-IN")} km</td>
+                          <td className="px-5 py-3.5 text-slate-500">{formatDate(row.synced_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
         {/* ─── TRANSFERS ─── */}
         {tab === "Transfers" && (
           <Card>
@@ -767,6 +838,16 @@ function Field({
       <dd className="text-sm font-medium text-slate-800">{children}</dd>
     </div>
   );
+}
+
+function formatYearMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function EmptyState({ message }: { message: string }) {

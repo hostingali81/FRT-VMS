@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { isMillitrackConfigured, millitrackSummary } from "@/lib/millitrack";
+import { syncMonthlyGpsDistance } from "@/lib/gps-distance";
 
 /**
  * Sync per-fill-up GPS distance from Millitrack into vehicle_fuel_logs.
@@ -106,4 +107,23 @@ export async function syncGpsDistanceAction() {
     `/fuel?sync=ok&vehicles=${vehiclesSynced}&segments=${segmentsUpdated}&failed=${failed}` +
       `&skipped=${candidates.length === 0 ? 1 : 0}`,
   );
+}
+
+/**
+ * Sync monthly GPS distance for every GPS-mapped vehicle (independent of fuel logs).
+ * Builds month-wise history in vehicle_gps_distance. super_admin only.
+ */
+export async function syncGpsMonthlyDistanceAction() {
+  const profile = await requireProfile();
+  if (profile.role !== "super_admin") {
+    throw new Error("Unauthorized: only super_admin can sync GPS distance");
+  }
+
+  const result = await syncMonthlyGpsDistance();
+
+  revalidatePath("/fuel");
+  if (!result.ok) {
+    redirect("/fuel?msync=error&reason=" + encodeURIComponent(result.reason ?? "unknown error"));
+  }
+  redirect(`/fuel?msync=ok&vehicles=${result.vehicles}&months=${result.months}&failed=${result.failed}`);
 }

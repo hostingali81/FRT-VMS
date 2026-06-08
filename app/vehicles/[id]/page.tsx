@@ -19,6 +19,7 @@ import {
   getDrivers,
   getFuelLogs,
   getFuelOwnershipHistory,
+  getGpsDistanceHistory,
   getLookups,
   getStatusHistory,
   getVehicle,
@@ -32,6 +33,7 @@ const VALID_TABS = [
   "Overview",
   "Drivers",
   "Fuel Logs",
+  "GPS Distance",
   "Transfers",
   "Status History",
   "Fuel History",
@@ -59,12 +61,13 @@ export default async function VehicleProfilePage({
   const vehicle = await getVehicle(params.id, profile);
   if (!vehicle) notFound();
 
-  const [drivers, transfers, statusHistory, fuelLogs, fuelOwnershipHistory, driverOwnershipHistory, availableDrivers, lookups] =
+  const [drivers, transfers, statusHistory, fuelLogs, gpsDistance, fuelOwnershipHistory, driverOwnershipHistory, availableDrivers, lookups] =
     await Promise.all([
       getDriverAssignments(vehicle.vehicle_id, profile),
       getVehicleTransfers(vehicle.vehicle_id, profile),
       getStatusHistory(vehicle.vehicle_id, profile),
       getFuelLogs(vehicle.vehicle_id, profile),
+      getGpsDistanceHistory(vehicle.vehicle_id, profile),
       getFuelOwnershipHistory(vehicle.vehicle_id, profile),
       getDriverOwnershipHistory(vehicle.vehicle_id, profile),
       getDrivers(profile),
@@ -102,6 +105,7 @@ export default async function VehicleProfilePage({
         transfers={transfers}
         statusHistory={statusHistory}
         fuelLogs={fuelLogs}
+        gpsDistance={gpsDistance}
         fuelOwnershipHistory={fuelOwnershipHistory}
         driverOwnershipHistory={driverOwnershipHistory}
         availableDrivers={availableDrivers}

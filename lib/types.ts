@@ -232,6 +232,15 @@ export type DriverOwnershipHistoryItem = {
   changed_by: string | null;
 };
 
+export type GpsDistanceMonth = {
+  id: string;
+  vehicle_id: string;
+  year_month: string; // 'YYYY-MM'
+  distance_km: number;
+  synced_at: string;
+  created_at?: string;
+};
+
 export const FUEL_LOG_TYPES = ["CNG", "Petrol", "Diesel"] as const;
 export type FuelLogType = (typeof FUEL_LOG_TYPES)[number];
 

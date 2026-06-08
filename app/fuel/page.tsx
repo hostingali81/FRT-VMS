@@ -9,15 +9,26 @@ import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getFuelLogsForMonth, getVehicles } from "@/lib/data";
 import { canEditVehicle } from "@/lib/permissions";
-import { syncGpsDistanceAction } from "@/lib/actions/gps-actions";
+import { syncGpsDistanceAction, syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
+// Allow up to 60s for GPS sync actions (one Millitrack call per vehicle).
+export const maxDuration = 60;
 
 export default async function FuelDashboardPage({
   searchParams,
 }: {
-  searchParams: { m?: string; sync?: string; vehicles?: string; segments?: string; failed?: string; reason?: string };
+  searchParams: {
+    m?: string;
+    sync?: string;
+    msync?: string;
+    vehicles?: string;
+    segments?: string;
+    months?: string;
+    failed?: string;
+    reason?: string;
+  };
 }) {
   const profile = await requireProfile();
 
@@ -69,10 +80,18 @@ export default async function FuelDashboardPage({
           </LinkButton>
         )}
         {isSuperAdmin && (
+          <form action={syncGpsMonthlyDistanceAction}>
+            <SubmitButton variant="outline">
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Sync Monthly Distance
+            </SubmitButton>
+          </form>
+        )}
+        {isSuperAdmin && (
           <form action={syncGpsDistanceAction}>
             <SubmitButton variant="outline">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Sync GPS Distance
+              Sync Fuel Distance
             </SubmitButton>
           </form>
         )}
@@ -88,6 +107,17 @@ export default async function FuelDashboardPage({
       {searchParams.sync === "error" && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 sm:px-6 lg:px-8">
           GPS sync failed: {searchParams.reason ?? "unknown error"}
+        </div>
+      )}
+      {searchParams.msync === "ok" && (
+        <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 sm:px-6 lg:px-8">
+          Monthly distance synced — {searchParams.vehicles ?? 0} vehicles, {searchParams.months ?? 0} month-rows updated
+          {Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : ""}.
+        </div>
+      )}
+      {searchParams.msync === "error" && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 sm:px-6 lg:px-8">
+          Monthly distance sync failed: {searchParams.reason ?? "unknown error"}
         </div>
       )}
 
