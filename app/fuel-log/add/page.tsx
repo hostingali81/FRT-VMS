@@ -26,6 +26,8 @@ export default async function AddFuelEntryPage({
     .map((v) => ({
       vehicle_id: v.vehicle_id,
       registration_no: v.registration_no,
+      frt_no: v.frt_no,
+      substation: v.substation,
       division: v.division,
       fuel_type: v.fuel_type,
     }));

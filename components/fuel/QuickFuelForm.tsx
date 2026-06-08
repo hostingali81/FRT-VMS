@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils/cn";
 type VehicleOption = {
   vehicle_id: string;
   registration_no: string;
+  frt_no: string | null;
+  substation: string | null;
   division: string | null;
   fuel_type: string | null;
 };
@@ -67,12 +69,15 @@ export function QuickFuelForm({
             <option value="" disabled>
               Vehicle chuno…
             </option>
-            {vehicles.map((v) => (
-              <option key={v.vehicle_id} value={v.vehicle_id}>
-                {v.registration_no}
-                {v.division ? ` — ${v.division}` : ""}
-              </option>
-            ))}
+            {vehicles.map((v) => {
+              const suffix = [v.frt_no, v.substation].filter(Boolean).join(" ");
+              return (
+                <option key={v.vehicle_id} value={v.vehicle_id}>
+                  {v.registration_no}
+                  {suffix ? ` - ${suffix}` : ""}
+                </option>
+              );
+            })}
           </Select>
         </div>
       )}

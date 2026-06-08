@@ -122,6 +122,8 @@ export function VehicleProfileTabs({
   const fuelVehicleOption = {
     vehicle_id: vehicle.vehicle_id,
     registration_no: vehicle.registration_no,
+    frt_no: vehicle.frt_no ?? null,
+    substation: vehicle.substation ?? null,
     division: vehicle.division ?? null,
     fuel_type: vehicle.fuel_type ?? null,
   };
