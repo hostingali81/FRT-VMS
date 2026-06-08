@@ -7,13 +7,13 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
-import { getAllLookups, getFuelLogsForMonth, getVehicles } from "@/lib/data";
+import { getAllLookups, getFuelLogsForMonth, getGpsDistanceForMonth, getVehicles } from "@/lib/data";
 import { canEditVehicle } from "@/lib/permissions";
-import { syncGpsDistanceAction, syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
+import { syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
-// Allow up to 60s for GPS sync actions (one Millitrack call per vehicle).
+// Allow up to 60s for the GPS sync action (one Millitrack call per vehicle).
 export const maxDuration = 60;
 
 export default async function FuelDashboardPage({
@@ -21,10 +21,8 @@ export default async function FuelDashboardPage({
 }: {
   searchParams: {
     m?: string;
-    sync?: string;
     msync?: string;
     vehicles?: string;
-    segments?: string;
     months?: string;
     failed?: string;
     reason?: string;
@@ -35,9 +33,10 @@ export default async function FuelDashboardPage({
   const currentMonthStr = currentYearMonth();
   const yearMonth = isValidYearMonth(searchParams.m) ? searchParams.m : currentMonthStr;
 
-  const [vehicles, fuelLogs, lookups] = await Promise.all([
+  const [vehicles, fuelLogs, gpsDistance, lookups] = await Promise.all([
     getVehicles(profile),
     getFuelLogsForMonth(profile, yearMonth),
+    getGpsDistanceForMonth(yearMonth),
     getAllLookups(),
   ]);
 
@@ -49,22 +48,26 @@ export default async function FuelDashboardPage({
     logsByVehicle.get(log.vehicle_id)!.push(log);
   }
 
+  // Monthly GPS distance (set by "Sync GPS Data") for the selected month.
+  const gpsKmByVehicle = new Map<string, number>();
+  for (const row of gpsDistance) gpsKmByVehicle.set(row.vehicle_id, row.distance_km);
+
   const rows = activeVehicles.map((v) => {
     const logs = logsByVehicle.get(v.vehicle_id) ?? [];
     const totalLitres = logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0);
     const totalAmount = logs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0);
-    // Per fill-up roll-up for the month: GPS km of fills that have it ÷ those fills' litres
-    const gpsKm = logs.reduce((sum, l) => sum + (l.gps_distance_km ?? 0), 0);
-    const litresWithGps = logs.reduce((sum, l) => sum + (l.gps_distance_km != null ? l.fuel_litres : 0), 0);
-    const avg = litresWithGps > 0 ? +(gpsKm / litresWithGps).toFixed(1) : null;
+    const gpsKm = gpsKmByVehicle.get(v.vehicle_id) ?? 0;
+    // Average only when BOTH fuel and GPS distance exist — no fuel => no average (avoids confusion).
+    const avg = totalLitres > 0 && gpsKm > 0 ? +(gpsKm / totalLitres).toFixed(1) : null;
+    const hasGps = Boolean(v.gps_device_id);
     const canManage = canEditVehicle(profile, v, lookups);
-    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, avg, canManage };
+    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, avg, hasGps, canManage };
   });
 
   const companyRows = rows.filter((r) => r.vehicle.fuel_ownership === "company");
   const grandLitres = companyRows.reduce((sum, r) => sum + r.totalLitres, 0);
   const grandAmount = companyRows.reduce((sum, r) => sum + r.totalAmount, 0);
-  const grandKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
+  const grandKm = rows.reduce((sum, r) => sum + r.gpsKm, 0);
   const vehiclesLogged = companyRows.filter((r) => r.logs.length > 0).length;
 
   const isSuperAdmin = profile.role === "super_admin";
@@ -83,35 +86,16 @@ export default async function FuelDashboardPage({
           <form action={syncGpsMonthlyDistanceAction}>
             <SubmitButton variant="outline">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Sync Monthly Distance
-            </SubmitButton>
-          </form>
-        )}
-        {isSuperAdmin && (
-          <form action={syncGpsDistanceAction}>
-            <SubmitButton variant="outline">
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Sync Fuel Distance
+              Sync GPS Data
             </SubmitButton>
           </form>
         )}
       </PageHeader>
 
       {/* Sync result banner */}
-      {searchParams.sync === "ok" && (
-        <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 sm:px-6 lg:px-8">
-          GPS sync complete — {searchParams.vehicles ?? 0} vehicles, {searchParams.segments ?? 0} segments updated
-          {Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : ""}.
-        </div>
-      )}
-      {searchParams.sync === "error" && (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 sm:px-6 lg:px-8">
-          GPS sync failed: {searchParams.reason ?? "unknown error"}
-        </div>
-      )}
       {searchParams.msync === "ok" && (
         <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 sm:px-6 lg:px-8">
-          Monthly distance synced — {searchParams.vehicles ?? 0} vehicles, {searchParams.months ?? 0} month-rows updated
+          GPS data synced — {searchParams.vehicles ?? 0} vehicles updated (current month till today)
           {Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : ""}.
         </div>
       )}
@@ -176,7 +160,7 @@ export default async function FuelDashboardPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rows.map(({ vehicle, logs, totalLitres, totalAmount, gpsKm, avg, canManage }) => {
+                  {rows.map(({ vehicle, logs, totalLitres, totalAmount, gpsKm, avg, hasGps, canManage }) => {
                     const isCompany = vehicle.fuel_ownership === "company";
                     return (
                       <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
@@ -224,8 +208,10 @@ export default async function FuelDashboardPage({
                           )}
                         </td>
                         <td className="px-5 py-3.5 text-right text-slate-600">
-                          {isCompany && gpsKm > 0 ? (
-                            gpsKm.toLocaleString("en-IN")
+                          {hasGps ? (
+                            <span className={gpsKm > 0 ? "font-medium text-slate-900" : "text-slate-400"}>
+                              {gpsKm.toLocaleString("en-IN")}
+                            </span>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
@@ -233,8 +219,6 @@ export default async function FuelDashboardPage({
                         <td className="px-5 py-3.5 text-right">
                           {avg !== null ? (
                             <Badge tone="green">{avg}</Badge>
-                          ) : isCompany && logs.length > 0 ? (
-                            <span className="text-xs text-slate-400">need GPS sync</span>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}

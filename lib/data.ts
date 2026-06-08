@@ -329,6 +329,23 @@ export async function getGpsDistanceHistory(vehicleId: string, profile?: UserPro
   return (data ?? []) as GpsDistanceMonth[];
 }
 
+/** Monthly GPS distance for every vehicle in a given month (for the fuel dashboard KM column). */
+export async function getGpsDistanceForMonth(yearMonth: string): Promise<{ vehicle_id: string; distance_km: number }[]> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("vehicle_gps_distance")
+    .select("vehicle_id,distance_km")
+    .eq("year_month", yearMonth);
+
+  if (error) {
+    console.error("[data.ts] getGpsDistanceForMonth failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as { vehicle_id: string; distance_km: number }[];
+}
+
 export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<FuelOwnershipHistoryItem[]> {
   if (profile) {
     const vehicle = await getVehicle(vehicleId, profile);
