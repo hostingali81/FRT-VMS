@@ -21,9 +21,16 @@ export type MonthlySyncResult = {
   vehicles: number; // distinct vehicles touched
   months: number; // month-rows upserted
   failed: number;
+  from?: string; // ISO: current month start (IST) that distance is measured from
+  to?: string; // ISO: sync instant (the "till" point)
 };
 
 const ymOf = (year: number, monthIdx: number) => `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+
+// India is UTC+5:30. Months are treated as IST calendar months so "month start"
+// is 00:00 IST (not 05:30 IST, which a UTC boundary would produce).
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const istMonthStart = (year: number, monthIdx: number) => new Date(Date.UTC(year, monthIdx, 1) - IST_OFFSET_MS);
 
 export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
   if (!isMillitrackConfigured()) {
@@ -42,12 +49,14 @@ export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
 
   const now = new Date();
   const nowISO = now.toISOString();
-  const curYear = now.getUTCFullYear();
-  const curMonth = now.getUTCMonth();
+  // Current calendar position in IST.
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  const curYear = istNow.getUTCFullYear();
+  const curMonth = istNow.getUTCMonth();
 
   // Current month always; plus the previous month early in a new month to finalize it.
   const targets: { year: number; monthIdx: number }[] = [{ year: curYear, monthIdx: curMonth }];
-  if (now.getUTCDate() <= 2) {
+  if (istNow.getUTCDate() <= 2) {
     const prev = new Date(Date.UTC(curYear, curMonth - 1, 1));
     targets.unshift({ year: prev.getUTCFullYear(), monthIdx: prev.getUTCMonth() });
   }
@@ -62,8 +71,8 @@ export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
     await Promise.all(
       batch.map(async (v) => {
         for (const t of targets) {
-          const startISO = new Date(Date.UTC(t.year, t.monthIdx, 1)).toISOString();
-          const monthEnd = new Date(Date.UTC(t.year, t.monthIdx + 1, 1));
+          const startISO = istMonthStart(t.year, t.monthIdx).toISOString();
+          const monthEnd = istMonthStart(t.year, t.monthIdx + 1);
           const endISO = monthEnd > now ? nowISO : monthEnd.toISOString(); // cap current month at "now"
           try {
             const rows = await millitrackSummary(String(v.gps_device_id), startISO, endISO);
@@ -86,5 +95,12 @@ export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
     );
   }
 
-  return { ok: true, vehicles: touched.size, months, failed };
+  return {
+    ok: true,
+    vehicles: touched.size,
+    months,
+    failed,
+    from: istMonthStart(curYear, curMonth).toISOString(),
+    to: nowISO,
+  };
 }

@@ -125,5 +125,8 @@ export async function syncGpsMonthlyDistanceAction() {
   if (!result.ok) {
     redirect("/fuel?msync=error&reason=" + encodeURIComponent(result.reason ?? "unknown error"));
   }
-  redirect(`/fuel?msync=ok&vehicles=${result.vehicles}&months=${result.months}&failed=${result.failed}`);
+  redirect(
+    `/fuel?msync=ok&vehicles=${result.vehicles}&months=${result.months}&failed=${result.failed}` +
+      `&from=${encodeURIComponent(result.from ?? "")}&to=${encodeURIComponent(result.to ?? "")}`,
+  );
 }

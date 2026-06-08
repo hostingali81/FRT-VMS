@@ -26,6 +26,8 @@ export default async function FuelDashboardPage({
     months?: string;
     failed?: string;
     reason?: string;
+    from?: string;
+    to?: string;
   };
 }) {
   const profile = await requireProfile();
@@ -95,7 +97,10 @@ export default async function FuelDashboardPage({
       {/* Sync result banner */}
       {searchParams.msync === "ok" && (
         <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 sm:px-6 lg:px-8">
-          GPS data synced — {searchParams.vehicles ?? 0} vehicles updated (current month till today)
+          GPS data synced — {searchParams.vehicles ?? 0} vehicles updated
+          {searchParams.from && searchParams.to
+            ? ` · data from ${fmtIST(searchParams.from)} to ${fmtIST(searchParams.to)} (IST)`
+            : ""}
           {Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : ""}.
         </div>
       )}
@@ -245,4 +250,19 @@ export default async function FuelDashboardPage({
       </div>
     </AppShell>
   );
+}
+
+/** Format an ISO timestamp as a readable IST date-time, e.g. "01 Jun 2026, 12:00 AM". */
+function fmtIST(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  });
 }
