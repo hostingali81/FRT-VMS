@@ -63,6 +63,7 @@ export function VehicleTable({
         vehicle.registration_no?.toLowerCase().includes(q) ||
         vehicle.frt_no?.toLowerCase().includes(q) ||
         vehicle.vehicle_type?.toLowerCase().includes(q) ||
+        vehicle.owner_name?.toLowerCase().includes(q) ||
         vehicle.vendor_name?.toLowerCase().includes(q) ||
         vehicle.current_circle?.toLowerCase().includes(q) ||
         vehicle.division?.toLowerCase().includes(q) ||
@@ -220,11 +221,13 @@ export function VehicleTable({
                   "FRT No": vehicle.frt_no,
                   Registration: vehicle.registration_no,
                   Type: vehicle.vehicle_type,
+                  Owner: vehicle.owner_name,
+                  "Owner Mobile": vehicle.owner_mobile,
+                  Vendor: vehicle.vendor_name,
                   Circle: vehicle.current_circle,
                   Division: vehicle.division,
                   Substation: vehicle.substation,
                   Status: vehicle.status,
-                  Vendor: vehicle.vendor_name,
                   "Fuel By": vehicle.fuel_ownership === "vendor" ? "Vendor" : "Company",
                   "Driver By": vehicle.driver_ownership === "vendor" ? "Vendor" : "Company",
                 })),
@@ -237,12 +240,13 @@ export function VehicleTable({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[1560px] w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1680px] w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-3">FRT No</th>
               <th className="px-5 py-3">Reg No</th>
               <th className="px-5 py-3">Type</th>
+              <th className="px-5 py-3">Owner</th>
               <th className="px-5 py-3">Vendor</th>
               <th className="px-5 py-3">Circle</th>
               <th className="px-5 py-3">Division</th>
@@ -276,6 +280,12 @@ export function VehicleTable({
                     </Link>
                   </td>
                   <td data-label="Type" className="px-5 py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
+                  <td data-label="Owner" className="px-5 py-4 text-slate-600">
+                    {vehicle.owner_name ?? "—"}
+                    {vehicle.owner_mobile && (
+                      <span className="block text-xs text-slate-400">{vehicle.owner_mobile}</span>
+                    )}
+                  </td>
                   <td data-label="Vendor" className="px-5 py-4 text-slate-600">{vehicle.vendor_name ?? "—"}</td>
                   <td data-label="Circle" className="px-5 py-4 text-slate-600">{vehicle.current_circle ?? vehicle.home_circle}</td>
                   <td data-label="Division" className="px-5 py-4 text-slate-600">{vehicle.division ?? "Unassigned"}</td>
