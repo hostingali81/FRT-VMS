@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const publicPaths = ["/login"];
+// /api/cron/* secures itself via CRON_SECRET (see app/api/cron/*), so it must
+// bypass the Supabase session gate — cron requests carry no auth cookie.
+const publicPaths = ["/login", "/api/cron"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
