@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
@@ -75,6 +76,24 @@ export default async function FuelDashboardPage({
   const isSuperAdmin = profile.role === "super_admin";
   const canAddFuel = profile.role !== "viewer";
 
+  const syncBanner = (() => {
+    if (searchParams.msync === "ok") {
+      const range =
+        searchParams.from && searchParams.to
+          ? ` · data from ${fmtIST(searchParams.from)} to ${fmtIST(searchParams.to)} (IST)`
+          : "";
+      const failedPart = Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : "";
+      return {
+        tone: "success" as const,
+        message: `GPS data synced — ${searchParams.vehicles ?? 0} vehicles updated${range}${failedPart}.`,
+      };
+    }
+    if (searchParams.msync === "error") {
+      return { tone: "error" as const, message: `Monthly distance sync failed: ${searchParams.reason ?? "unknown error"}` };
+    }
+    return null;
+  })();
+
   return (
     <AppShell profile={profile}>
       <PageHeader title="Fuel Dashboard" eyebrow="Monthly fuel summary per vehicle">
@@ -94,21 +113,8 @@ export default async function FuelDashboardPage({
         )}
       </PageHeader>
 
-      {/* Sync result banner */}
-      {searchParams.msync === "ok" && (
-        <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 sm:px-6 lg:px-8">
-          GPS data synced — {searchParams.vehicles ?? 0} vehicles updated
-          {searchParams.from && searchParams.to
-            ? ` · data from ${fmtIST(searchParams.from)} to ${fmtIST(searchParams.to)} (IST)`
-            : ""}
-          {Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : ""}.
-        </div>
-      )}
-      {searchParams.msync === "error" && (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 sm:px-6 lg:px-8">
-          Monthly distance sync failed: {searchParams.reason ?? "unknown error"}
-        </div>
-      )}
+      {/* Sync result banner — auto-dismisses after a few seconds */}
+      {syncBanner && <DismissibleBanner tone={syncBanner.tone} message={syncBanner.message} />}
 
       <MonthNavigator basePath="/fuel" yearMonth={yearMonth} />
 
