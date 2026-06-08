@@ -1,17 +1,19 @@
 // Server-only module: imported solely by server actions and the cron route handler.
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { isMillitrackConfigured, millitrackSummary } from "@/lib/millitrack";
+import { isWheelsEyeConfigured, wheelsEyeDistanceByReg } from "@/lib/wheelseye";
 
 /**
  * Standalone monthly GPS distance sync — independent of fuel logs.
  *
- * For every vehicle that has a numeric Millitrack device id (gps_device_id),
- * fetch the distance for the current month [month start → now] and upsert it
+ * Provider-aware: a vehicle's gps_company decides which platform we pull from.
+ *   - "VehicleStep" → Millitrack (one summary call per vehicle, per month)
+ *   - "WheelsEye"   → WheelsEye  (one report call covers all vehicles, per month)
+ *
+ * For each vehicle we upsert the distance for the current month [month start → now]
  * into vehicle_gps_distance keyed by (vehicle_id, year_month). Past months stay
  * frozen; the current month's row updates on each run, building month-wise history.
- *
- * On the 1st–2nd of a month we also re-sync the just-ended previous month so its
- * total is finalized over the full month range.
+ * On the 1st–2nd we also re-sync the just-ended previous month to finalize it.
  *
  * Shared by the manual button (server action) and the daily Vercel cron route.
  */
@@ -26,6 +28,7 @@ export type MonthlySyncResult = {
 };
 
 const ymOf = (year: number, monthIdx: number) => `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // India is UTC+5:30. Months are treated as IST calendar months so "month start"
 // is 00:00 IST (not 05:30 IST, which a UTC boundary would produce).
@@ -33,19 +36,18 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const istMonthStart = (year: number, monthIdx: number) => new Date(Date.UTC(year, monthIdx, 1) - IST_OFFSET_MS);
 
 export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
-  if (!isMillitrackConfigured()) {
-    return { ok: false, reason: "Millitrack not configured (set MT_USERNAME/MT_EMAIL + MT_PASSWORD)", vehicles: 0, months: 0, failed: 0 };
-  }
   const supabase = createSupabaseAdminClient();
   if (!supabase) return { ok: false, reason: "Database connection not available", vehicles: 0, months: 0, failed: 0 };
 
   const { data: vehicles, error } = await supabase
     .from("vehicles")
-    .select("id,registration_no,gps_device_id")
+    .select("id,registration_no,gps_device_id,gps_company")
     .not("gps_device_id", "is", null);
   if (error) return { ok: false, reason: error.message, vehicles: 0, months: 0, failed: 0 };
 
-  const candidates = (vehicles ?? []).filter((v) => v.gps_device_id && /^\d+$/.test(String(v.gps_device_id).trim()));
+  const all = vehicles ?? [];
+  const millitrack = all.filter((v) => v.gps_company === "VehicleStep" && /^\d+$/.test(String(v.gps_device_id).trim()));
+  const wheelseye = all.filter((v) => v.gps_company === "WheelsEye");
 
   const now = new Date();
   const nowISO = now.toISOString();
@@ -65,34 +67,72 @@ export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
   let failed = 0;
   const touched = new Set<string>();
 
-  const CHUNK = 5; // limit concurrency so we don't hammer the GPS API / blow the timeout
-  for (let i = 0; i < candidates.length; i += CHUNK) {
-    const batch = candidates.slice(i, i + CHUNK);
-    await Promise.all(
-      batch.map(async (v) => {
-        for (const t of targets) {
-          const startISO = istMonthStart(t.year, t.monthIdx).toISOString();
-          const monthEnd = istMonthStart(t.year, t.monthIdx + 1);
-          const endISO = monthEnd > now ? nowISO : monthEnd.toISOString(); // cap current month at "now"
+  const upsert = async (vehicleId: string, year: number, monthIdx: number, km: number) => {
+    const { error: upErr } = await supabase
+      .from("vehicle_gps_distance")
+      .upsert(
+        { vehicle_id: vehicleId, year_month: ymOf(year, monthIdx), distance_km: +km.toFixed(2), synced_at: nowISO },
+        { onConflict: "vehicle_id,year_month" },
+      );
+    if (upErr) throw new Error(upErr.message);
+  };
+
+  // ── Millitrack: one summary call per vehicle, per month (chunked concurrency) ──
+  if (millitrack.length && isMillitrackConfigured()) {
+    const CHUNK = 5;
+    for (let i = 0; i < millitrack.length; i += CHUNK) {
+      const batch = millitrack.slice(i, i + CHUNK);
+      await Promise.all(
+        batch.map(async (v) => {
+          for (const t of targets) {
+            const startISO = istMonthStart(t.year, t.monthIdx).toISOString();
+            const monthEnd = istMonthStart(t.year, t.monthIdx + 1);
+            const endISO = monthEnd > now ? nowISO : monthEnd.toISOString();
+            try {
+              const rows = await millitrackSummary(String(v.gps_device_id), startISO, endISO);
+              const km = rows.reduce((sum, r) => sum + (r.distance ?? 0) / 1000, 0);
+              await upsert(v.id, t.year, t.monthIdx, km);
+              months += 1;
+              touched.add(v.id);
+            } catch (e) {
+              console.error(`[gps-monthly/millitrack] ${v.registration_no}:`, e instanceof Error ? e.message : e);
+              failed += 1;
+            }
+          }
+        }),
+      );
+    }
+  }
+
+  // ── WheelsEye: one report call covers all vehicles, per month ──
+  if (wheelseye.length && isWheelsEyeConfigured()) {
+    for (const t of targets) {
+      const monthStart = istMonthStart(t.year, t.monthIdx);
+      const monthEnd = istMonthStart(t.year, t.monthIdx + 1);
+      const fromSec = Math.floor(monthStart.getTime() / 1000);
+      const toSec = Math.floor((monthEnd > now ? now : monthEnd).getTime() / 1000);
+      try {
+        const kmByReg = await wheelsEyeDistanceByReg(fromSec, toSec);
+        for (const v of wheelseye) {
+          const km = kmByReg.get(normReg(v.registration_no));
+          if (km == null) {
+            failed += 1;
+            continue;
+          }
           try {
-            const rows = await millitrackSummary(String(v.gps_device_id), startISO, endISO);
-            const km = rows.reduce((sum, r) => sum + (r.distance ?? 0) / 1000, 0);
-            const { error: upErr } = await supabase
-              .from("vehicle_gps_distance")
-              .upsert(
-                { vehicle_id: v.id, year_month: ymOf(t.year, t.monthIdx), distance_km: +km.toFixed(2), synced_at: nowISO },
-                { onConflict: "vehicle_id,year_month" },
-              );
-            if (upErr) throw new Error(upErr.message);
+            await upsert(v.id, t.year, t.monthIdx, km);
             months += 1;
             touched.add(v.id);
           } catch (e) {
-            console.error(`[gps-monthly] ${v.registration_no}:`, e instanceof Error ? e.message : e);
+            console.error(`[gps-monthly/wheelseye] ${v.registration_no}:`, e instanceof Error ? e.message : e);
             failed += 1;
           }
         }
-      }),
-    );
+      } catch (e) {
+        console.error(`[gps-monthly/wheelseye] report ${ymOf(t.year, t.monthIdx)}:`, e instanceof Error ? e.message : e);
+        failed += wheelseye.length;
+      }
+    }
   }
 
   return {
