@@ -1,9 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Suspense } from "react";
 import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 import { ToastProvider } from "@/components/shared/ToastProvider";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -19,6 +21,24 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "FRT-VMS | Imperial Electric",
   description: "Multi-circle vehicle management system for FRT operations.",
+  applicationName: "FRT-VMS",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "FRT-VMS" },
+  formatDetection: { telephone: false },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -36,6 +56,8 @@ export default function RootLayout({
           <ToastProvider />
         </Suspense>
         {children}
+        <InstallPrompt />
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );
