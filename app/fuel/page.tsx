@@ -71,7 +71,9 @@ export default async function FuelDashboardPage({
   const grandLitres = companyRows.reduce((sum, r) => sum + r.totalLitres, 0);
   const grandAmount = companyRows.reduce((sum, r) => sum + r.totalAmount, 0);
   const grandKm = rows.reduce((sum, r) => sum + r.gpsKm, 0);
-  const vehiclesLogged = companyRows.filter((r) => r.logs.length > 0).length;
+  // Average mileage uses company vehicles only (fuel is logged for company-owned vehicles).
+  const companyKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
+  const grandAvg = grandLitres > 0 && companyKm > 0 ? +(companyKm / grandLitres).toFixed(1) : null;
 
   const isSuperAdmin = profile.role === "super_admin";
   const canAddFuel = profile.role !== "viewer";
@@ -118,30 +120,32 @@ export default async function FuelDashboardPage({
 
       <MonthNavigator basePath="/fuel" yearMonth={yearMonth} />
 
-      {/* Summary strip */}
+      {/* Summary strip — 2×2 stat grid on mobile, inline row on sm+ */}
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap gap-x-8 gap-y-1.5 text-sm">
-          <span className="flex items-center gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">{vehiclesLogged}</span>
-            <span className="text-slate-500">vehicles with entries</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">
-              {grandLitres > 0 ? `${grandLitres} L` : "—"}
-            </span>
-            <span className="text-slate-500">total fuel</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">
-              {grandAmount > 0 ? `₹${grandAmount.toLocaleString("en-IN")}` : "—"}
-            </span>
-            <span className="text-slate-500">total cost</span>
-          </span>
-          <span className="flex items-center gap-1.5">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-1.5">
+          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
             <span className="text-base font-bold tabular-nums text-slate-900">
               {grandKm > 0 ? `${grandKm.toLocaleString("en-IN")} km` : "—"}
             </span>
-            <span className="text-slate-500">distance (GPS)</span>
+            <span className="text-xs text-slate-500 sm:text-sm">distance (GPS)</span>
+          </span>
+          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+            <span className="text-base font-bold tabular-nums text-slate-900">
+              {grandLitres > 0 ? `${grandLitres} L` : "—"}
+            </span>
+            <span className="text-xs text-slate-500 sm:text-sm">total fuel</span>
+          </span>
+          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+            <span className="text-base font-bold tabular-nums text-slate-900">
+              {grandAvg !== null ? `${grandAvg} km/L` : "—"}
+            </span>
+            <span className="text-xs text-slate-500 sm:text-sm">average</span>
+          </span>
+          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+            <span className="text-base font-bold tabular-nums text-slate-900">
+              {grandAmount > 0 ? `₹${grandAmount.toLocaleString("en-IN")}` : "—"}
+            </span>
+            <span className="text-xs text-slate-500 sm:text-sm">total cost</span>
           </span>
         </div>
       </div>
@@ -156,18 +160,18 @@ export default async function FuelDashboardPage({
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] divide-y divide-slate-200 text-sm">
+              <table className="w-full min-w-[640px] divide-y divide-slate-200 text-xs sm:min-w-[760px] sm:text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-5 py-3">Vehicle</th>
-                    <th className="px-5 py-3">Location</th>
-                    <th className="px-5 py-3">Ownership</th>
-                    <th className="px-5 py-3 text-right">Entries</th>
-                    <th className="px-5 py-3 text-right">Fuel (L)</th>
-                    <th className="px-5 py-3 text-right">Cost (₹)</th>
-                    <th className="px-5 py-3 text-right">KM (GPS)</th>
-                    <th className="px-5 py-3 text-right">Avg km/L</th>
-                    <th className="px-5 py-3" />
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Vehicle</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Location</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Ownership</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Entries</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Fuel (L)</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Cost (₹)</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">KM (GPS)</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Avg km/L</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -175,28 +179,28 @@ export default async function FuelDashboardPage({
                     const isCompany = vehicle.fuel_ownership === "company";
                     return (
                       <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
-                        <td className="px-5 py-3.5">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5">
                           <Link
                             href={`/vehicles/${vehicle.vehicle_id}?tab=Fuel+Logs`}
                             className="font-semibold text-slate-900 hover:underline"
                           >
                             {vehicle.registration_no}
                           </Link>
-                          <p className="text-xs text-slate-400">{vehicle.vehicle_type ?? "—"}</p>
+                          <p className="text-xs text-slate-400">{vehicle.vendor_name ?? "—"}</p>
                         </td>
-                        <td className="px-5 py-3.5 text-slate-600">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-slate-600">
                           <span className="block">{vehicle.division ?? "Unassigned"}</span>
                           <span className="text-xs text-slate-400">
                             {vehicle.substation ?? "—"}
                             {vehicle.frt_no ? ` (${vehicle.frt_no})` : ""}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5">
                           <Badge tone={isCompany ? "blue" : "yellow"}>
                             {isCompany ? "Company" : "Vendor"}
                           </Badge>
                         </td>
-                        <td className="px-5 py-3.5 text-right">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {isCompany ? (
                             <span className={logs.length > 0 ? "font-semibold text-slate-900" : "text-slate-400"}>
                               {logs.length}
@@ -205,14 +209,14 @@ export default async function FuelDashboardPage({
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-right">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {isCompany && totalLitres > 0 ? (
                             <span className="font-medium text-slate-900">{totalLitres}</span>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-right">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {isCompany && totalAmount > 0 ? (
                             <span className="font-medium text-slate-900">
                               {totalAmount.toLocaleString("en-IN")}
@@ -221,7 +225,7 @@ export default async function FuelDashboardPage({
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-right text-slate-600">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right text-slate-600">
                           {hasGps ? (
                             <span className={gpsKm > 0 ? "font-medium text-slate-900" : "text-slate-400"}>
                               {gpsKm.toLocaleString("en-IN")}
@@ -230,14 +234,14 @@ export default async function FuelDashboardPage({
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-right">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {avg !== null ? (
                             <Badge tone="green">{avg}</Badge>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-right">
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {isCompany && canManage && (
                             <Link
                               href={`/vehicles/${vehicle.vehicle_id}?tab=Fuel+Logs`}

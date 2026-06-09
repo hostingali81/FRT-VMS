@@ -15,7 +15,7 @@ export async function AppShell({ children, profile }: { children: ReactNode; pro
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="border-b border-slate-200 px-5 py-5">
-          <Link href="/dashboard" className="block">
+          <Link href="/" className="block">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Imperial Electric</p>
             <p className="mt-1 text-lg font-semibold text-slate-950">FRT-VMS</p>
           </Link>

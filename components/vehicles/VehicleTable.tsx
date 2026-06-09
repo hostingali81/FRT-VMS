@@ -57,7 +57,12 @@ export function VehicleTable({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return vehicles.filter((vehicle) => {
+    const frtSortKey = (vehicle: FleetVehicle) => {
+      const match = vehicle.frt_no?.match(/\d+/);
+      return match ? parseInt(match[0], 10) : Number.POSITIVE_INFINITY;
+    };
+    return vehicles
+      .filter((vehicle) => {
       const matchesSearch =
         !q ||
         vehicle.registration_no?.toLowerCase().includes(q) ||
@@ -76,7 +81,8 @@ export function VehicleTable({
         (!status || vehicle.status === status) &&
         (!vendor || vehicle.vendor_name === vendor)
       );
-    });
+    })
+      .sort((a, b) => frtSortKey(a) - frtSortKey(b));
   }, [search, circleId, divisionId, status, substationId, vehicles, vendor]);
 
   const filterSelects = (
@@ -240,23 +246,19 @@ export function VehicleTable({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[1680px] w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[980px] w-full divide-y divide-slate-200 text-xs sm:min-w-[1200px] sm:text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-5 py-3">FRT No</th>
-              <th className="px-5 py-3">Reg No</th>
-              <th className="px-5 py-3">Type</th>
-              <th className="px-5 py-3">Owner</th>
-              <th className="px-5 py-3">Vendor</th>
-              <th className="px-5 py-3">Circle</th>
-              <th className="px-5 py-3">Division</th>
-              <th className="px-5 py-3">Substation</th>
-              <th className="px-5 py-3">Status</th>
-              <th className="px-5 py-3">Fuel By</th>
-              <th className="px-5 py-3">Driver By</th>
-              <th className="px-5 py-3">GPS</th>
-              <th className="px-5 py-3">Doc Status</th>
-              <th className="px-5 py-3 text-right">Actions</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3 min-w-[150px] sm:min-w-[220px]">FRT No / Location</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Reg No / Vendor</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Type</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Owner</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Circle</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Status</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Fuel / Driver</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">GPS</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3">Doc Status</th>
+              <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
@@ -271,43 +273,54 @@ export function VehicleTable({
 
               return (
                 <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
-                  <td data-label="FRT No" className="whitespace-nowrap px-5 py-4 font-semibold text-slate-700">
-                    {vehicle.frt_no ?? "—"}
+                  <td data-label="FRT No / Location" className="px-3 py-3 sm:px-5 sm:py-4">
+                    <span className="block whitespace-nowrap font-semibold text-slate-700">{vehicle.frt_no ?? "—"}</span>
+                    <span className="mt-1 block text-xs font-semibold text-slate-700">{vehicle.division ?? "Unassigned"}</span>
+                    {vehicle.substation && (
+                      <span className="block text-xs font-medium text-slate-600">{vehicle.substation}</span>
+                    )}
                   </td>
-                  <td data-label="Registration No" className="whitespace-nowrap px-5 py-4 font-semibold text-slate-950">
-                    <Link href={`/vehicles/${vehicle.vehicle_id}`} className="hover:underline">
+                  <td data-label="Reg No / Vendor" className="px-3 py-3 sm:px-5 sm:py-4">
+                    <Link
+                      href={`/vehicles/${vehicle.vehicle_id}`}
+                      className="block whitespace-nowrap font-semibold text-slate-950 hover:underline"
+                    >
                       {vehicle.registration_no}
                     </Link>
+                    <span className="block text-xs text-slate-400">{vehicle.vendor_name ?? "—"}</span>
                   </td>
-                  <td data-label="Type" className="px-5 py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
-                  <td data-label="Owner" className="px-5 py-4 text-slate-600">
+                  <td data-label="Type" className="px-3 py-3 sm:px-5 sm:py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
+                  <td data-label="Owner" className="px-3 py-3 sm:px-5 sm:py-4 text-slate-600">
                     {vehicle.owner_name ?? "—"}
                     {vehicle.owner_mobile && (
                       <span className="block text-xs text-slate-400">{vehicle.owner_mobile}</span>
                     )}
                   </td>
-                  <td data-label="Vendor" className="px-5 py-4 text-slate-600">{vehicle.vendor_name ?? "—"}</td>
-                  <td data-label="Circle" className="px-5 py-4 text-slate-600">{vehicle.current_circle ?? vehicle.home_circle}</td>
-                  <td data-label="Division" className="px-5 py-4 text-slate-600">{vehicle.division ?? "Unassigned"}</td>
-                  <td data-label="Substation" className="px-5 py-4 text-slate-600">{vehicle.substation ?? "Unassigned"}</td>
-                  <td data-label="Status" className="px-5 py-4">
+                  <td data-label="Circle" className="px-3 py-3 sm:px-5 sm:py-4 text-slate-600">{vehicle.current_circle ?? vehicle.home_circle}</td>
+                  <td data-label="Status" className="px-3 py-3 sm:px-5 sm:py-4">
                     <StatusBadge status={vehicle.status} />
                   </td>
-                  <td data-label="Fuel By" className="px-5 py-4">
-                    <Badge tone={vehicle.fuel_ownership === "vendor" ? "yellow" : "blue"}>
-                      {vehicle.fuel_ownership === "vendor" ? "Vendor" : "Company"}
-                    </Badge>
+                  <td data-label="Fuel / Driver" className="px-3 py-3 sm:px-5 sm:py-4">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <span className="inline-block w-12">Fuel</span>
+                        <Badge tone={vehicle.fuel_ownership === "vendor" ? "yellow" : "blue"}>
+                          {vehicle.fuel_ownership === "vendor" ? "Vendor" : "Company"}
+                        </Badge>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <span className="inline-block w-12">Driver</span>
+                        <Badge tone={vehicle.driver_ownership === "vendor" ? "yellow" : "blue"}>
+                          {vehicle.driver_ownership === "vendor" ? "Vendor" : "Company"}
+                        </Badge>
+                      </span>
+                    </div>
                   </td>
-                  <td data-label="Driver By" className="px-5 py-4">
-                    <Badge tone={vehicle.driver_ownership === "vendor" ? "yellow" : "blue"}>
-                      {vehicle.driver_ownership === "vendor" ? "Vendor" : "Company"}
-                    </Badge>
-                  </td>
-                  <td data-label="GPS" className="px-5 py-4 text-slate-600">{vehicle.gps_company ?? "Not set"}</td>
-                  <td data-label="Document Status" className="px-5 py-4">
+                  <td data-label="GPS" className="px-3 py-3 sm:px-5 sm:py-4 text-slate-600">{vehicle.gps_company ?? "Not set"}</td>
+                  <td data-label="Document Status" className="px-3 py-3 sm:px-5 sm:py-4">
                     <ExpiryBadge date={date} />
                   </td>
-                  <td data-label="Action" className="px-5 py-4">
+                  <td data-label="Action" className="px-3 py-3 sm:px-5 sm:py-4">
                     <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:justify-end sm:gap-2">
                       {canUpdate || editableIds.has(vehicle.vehicle_id) ? (
                         <LinkButton

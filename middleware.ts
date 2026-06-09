@@ -46,8 +46,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && path === "/login") {
+    // Send to "/" so the root route applies role-based landing
+    // (division_incharge → /fuel, everyone else → /dashboard).
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
   }

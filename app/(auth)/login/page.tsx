@@ -37,7 +37,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Land on "/" so the root route can send each role to its default page
+    // (division_incharge → /fuel, everyone else → /dashboard).
+    router.push("/");
   }
 
   return (
