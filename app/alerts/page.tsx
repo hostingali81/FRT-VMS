@@ -1,18 +1,24 @@
 import Link from "next/link";
-import { AlertTriangle, CarFront, CheckCircle2, IdCard } from "lucide-react";
+import { AlertTriangle, CarFront, CheckCircle2, IdCard, RefreshCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requireProfile } from "@/lib/auth";
 import { getAlertsData } from "@/lib/data";
+import { canCreateVehicle } from "@/lib/permissions";
+import { refreshRtoDocumentsAction } from "@/lib/actions/cars24-actions";
 import { daysUntil, getWorstDocumentState } from "@/lib/utils/expiry";
 import type { DriverShift } from "@/lib/types";
 import { cn } from "@/lib/utils/cn";
 
 export const dynamic = "force-dynamic";
+// Allow up to 60s for the RTO refresh (one Cars24 call per editable vehicle, batched).
+export const maxDuration = 60;
 
 const SHIFT_LABELS: Record<DriverShift, string> = {
   shift_a: "Shift A",
@@ -20,9 +26,41 @@ const SHIFT_LABELS: Record<DriverShift, string> = {
   shift_c: "Shift C",
 };
 
-export default async function AlertsPage() {
+export default async function AlertsPage({
+  searchParams,
+}: {
+  searchParams: {
+    rto?: string;
+    checked?: string;
+    updated?: string;
+    unchanged?: string;
+    nodata?: string;
+    failed?: string;
+    reason?: string;
+  };
+}) {
   const profile = await requireProfile();
   const { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers } = await getAlertsData(profile);
+
+  const canRefresh = canCreateVehicle(profile);
+
+  const rtoBanner = (() => {
+    if (searchParams.rto === "ok") {
+      const detail: string[] = [];
+      if (Number(searchParams.unchanged) > 0) detail.push(`${searchParams.unchanged} already up to date`);
+      if (Number(searchParams.nodata) > 0) detail.push(`${searchParams.nodata} no RTO record`);
+      if (Number(searchParams.failed) > 0) detail.push(`${searchParams.failed} failed`);
+      const suffix = detail.length ? ` (${detail.join(", ")})` : "";
+      return {
+        tone: "success" as const,
+        message: `RTO refresh complete — ${searchParams.updated ?? 0} of ${searchParams.checked ?? 0} vehicles updated${suffix}.`,
+      };
+    }
+    if (searchParams.rto === "error") {
+      return { tone: "error" as const, message: `RTO refresh failed: ${searchParams.reason ?? "unknown error"}` };
+    }
+    return null;
+  })();
 
   const sortedDocAlerts = [...documentAlerts].sort((a, b) => {
     const stateA = getWorstDocumentState([a.insurance_expiry, a.fitness_expiry, a.pollution_expiry]);
@@ -47,7 +85,19 @@ export default async function AlertsPage() {
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor" />
+      <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor">
+        {canRefresh && (
+          <form action={refreshRtoDocumentsAction}>
+            <SubmitButton variant="outline">
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Refresh from RTO
+            </SubmitButton>
+          </form>
+        )}
+      </PageHeader>
+
+      {/* RTO refresh result banner — auto-dismisses after a few seconds */}
+      {rtoBanner && <DismissibleBanner tone={rtoBanner.tone} message={rtoBanner.message} />}
 
       <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         {/* Summary — three clear stat cards */}
