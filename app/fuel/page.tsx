@@ -165,7 +165,7 @@ export default async function FuelDashboardPage({
                   <tr>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3">Vehicle</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3">Location</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Ownership</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Fuel By</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Entries</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Fuel (L)</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Cost (₹)</th>
