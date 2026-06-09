@@ -56,7 +56,7 @@ export function CreateUserPanel({
             <Input name="email" type="email" required />
           </Field>
           <Field label="Temporary Password">
-            <Input name="password" type="password" required minLength={12} />
+            <Input name="password" type="password" required minLength={6} />
           </Field>
           <RoleScopeFields lookups={lookups} defaultRole="viewer" />
           <div className="flex items-end">

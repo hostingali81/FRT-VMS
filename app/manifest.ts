@@ -5,7 +5,9 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "FRT-VMS — Imperial Electric",
     short_name: "FRT-VMS",
     description: "Fleet & vehicle management system for FRT operations — Imperial Electric.",
-    start_url: "/dashboard",
+    // Start at "/" so the root route applies role-based landing on PWA launch
+    // (division_incharge → /fuel, everyone else → /dashboard).
+    start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",

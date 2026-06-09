@@ -61,7 +61,7 @@ export async function createUserAction(formData: FormData) {
   const role = textValue(formData, "role") as UserRole | null;
 
   if (!email || !password || !name || !role) redirect("/admin?error=user-required");
-  if (password.length < 12) redirect("/admin?error=password-too-short");
+  if (password.length < 6) redirect("/admin?error=password-too-short");
   if (!(USER_ROLES as readonly string[]).includes(role)) redirect("/admin?error=invalid-role");
 
   // Validate scope before creating the auth user so a missing field can't leave
