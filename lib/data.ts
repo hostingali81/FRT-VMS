@@ -187,15 +187,15 @@ export async function getDrivers(profile?: UserProfile | null): Promise<DriverRe
 
   const lookups = await getAllLookups();
   const circleIds = accessibleCircleIds(profile, lookups);
-  const divisionIds = accessibleDivisionIds(profile, lookups);
   const vehicles = await getVehicles(profile);
   const visibleVehicleIds = new Set(vehicles.map((vehicle) => vehicle.vehicle_id));
 
+  // Circle-level roles see every driver in their circle(s); division-level roles
+  // have no circle access, so they only see drivers assigned to a visible vehicle.
   return drivers.filter(
     (driver) =>
       circleIds.has(driver.circle_id) ||
-      (driver.vehicle_id ? visibleVehicleIds.has(driver.vehicle_id) : false) ||
-      (driver.vehicle_id && driver.shift && profile.division_id ? divisionIds.has(profile.division_id) : false),
+      (driver.vehicle_id ? visibleVehicleIds.has(driver.vehicle_id) : false),
   );
 }
 

@@ -5,6 +5,13 @@ export function accessibleCircleIds(profile: UserProfile, lookups: LookupData) {
     return new Set(lookups.circles.map((circle) => circle.id));
   }
 
+  // Division-scoped roles never get circle-wide data access. Their profile carries
+  // a circle_id only as form context (the parent of their division); treating it as
+  // an access grant would leak every vehicle/driver/transfer in the whole circle.
+  if (profile.role === "division_incharge" || (profile.role === "viewer" && profile.division_id)) {
+    return new Set<string>();
+  }
+
   if (profile.circle_id) return new Set([profile.circle_id]);
 
   // Zone-scoped profile (e.g. a viewer assigned a whole zone): every circle in
@@ -30,11 +37,18 @@ export function filterLookupsForProfile(lookups: LookupData, profile: UserProfil
 
   const circleIds = accessibleCircleIds(profile, lookups);
   const divisionIds = accessibleDivisionIds(profile, lookups);
+  const divisions = lookups.divisions.filter((division) => divisionIds.has(division.id));
+
+  // A division-scoped user has no circle-wide access, but still needs its parent
+  // circle resolvable in dropdowns/labels. Include the parent circle of every
+  // accessible division without exposing that circle's other divisions.
+  const circleIdsForLookups = new Set(circleIds);
+  for (const division of divisions) circleIdsForLookups.add(division.circle_id);
 
   return {
     zones: lookups.zones?.filter((zone) => zone.id === profile.zone_id),
-    circles: lookups.circles.filter((circle) => circleIds.has(circle.id)),
-    divisions: lookups.divisions.filter((division) => divisionIds.has(division.id)),
+    circles: lookups.circles.filter((circle) => circleIdsForLookups.has(circle.id)),
+    divisions,
     substations: lookups.substations.filter((substation) => divisionIds.has(substation.division_id)),
   };
 }
