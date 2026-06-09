@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "cars24:fetch": "node vehicle-info/scripts/fetch-cars24-info.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
