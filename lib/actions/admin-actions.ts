@@ -32,8 +32,8 @@ function normalizeScope(role: UserRole, formData: FormData) {
     case "super_admin":
       return { zone_id: null, circle_id: null, division_id: null };
     case "zonal_manager":
-      if (!zone) redirect("/admin?error=scope-required");
-      return { zone_id: zone, circle_id: null, division_id: null };
+      // "Admin" role: organization-wide access, no location scope (zone unused).
+      return { zone_id: null, circle_id: null, division_id: null };
     case "circle_incharge":
       if (!circle) redirect("/admin?error=scope-required");
       return { zone_id: zone, circle_id: circle, division_id: null };

@@ -11,7 +11,7 @@ type ViewerScope = "zone" | "circle" | "division";
  * Role-driven location scope fields shared by the create and edit user forms.
  * Only the scope relevant to the selected role is shown:
  *   super_admin      -> none (full access)
- *   zonal_manager    -> Zone
+ *   zonal_manager    -> none (organization-wide "Admin", no location scope)
  *   circle_incharge  -> Circle
  *   division_incharge-> Circle, then Division (filtered to that circle)
  *   viewer           -> choose any one level: Zone, Circle, or Division
@@ -95,13 +95,11 @@ export function RoleScopeFields({
         </Select>
       </Field>
 
-      {role === "super_admin" ? (
+      {role === "super_admin" || role === "zonal_manager" ? (
         <Field label="Access">
           <p className="flex h-10 items-center text-sm text-slate-500">Full access — no location scope.</p>
         </Field>
       ) : null}
-
-      {role === "zonal_manager" ? <ZoneField zoneId={zoneId} setZoneId={setZoneId} lookups={lookups} /> : null}
 
       {role === "circle_incharge" ? (
         <>
