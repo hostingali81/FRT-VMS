@@ -275,10 +275,10 @@ export function VehicleTable({
                 <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
                   <td data-label="FRT No / Location" className="px-3 py-3 sm:px-5 sm:py-4">
                     <span className="block whitespace-nowrap font-semibold text-slate-700">{vehicle.frt_no ?? "—"}</span>
-                    <span className="mt-1 block text-xs font-semibold text-slate-700">{vehicle.division ?? "Unassigned"}</span>
                     {vehicle.substation && (
-                      <span className="block text-xs font-medium text-slate-600">{vehicle.substation}</span>
+                      <span className="mt-1 block text-xs font-semibold text-slate-700">{vehicle.substation}</span>
                     )}
+                    <span className="block text-xs text-slate-400">{vehicle.division ?? "Unassigned"}</span>
                   </td>
                   <td data-label="Reg No / Vendor" className="px-3 py-3 sm:px-5 sm:py-4">
                     <Link

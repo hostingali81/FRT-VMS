@@ -195,12 +195,11 @@ export default async function FuelDashboardPage({
                           </Link>
                           <p className="text-xs text-slate-400">{vehicle.vendor_name ?? "—"}</p>
                         </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-slate-600">
-                          <span className="block">{vehicle.division ?? "Unassigned"}</span>
-                          <span className="text-xs text-slate-400">
-                            {vehicle.substation ?? "—"}
-                            {vehicle.frt_no ? ` (${vehicle.frt_no})` : ""}
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5">
+                          <span className="block font-semibold text-slate-700">
+                            {vehicle.substation ?? "—"}{vehicle.frt_no ? ` (${vehicle.frt_no})` : ""}
                           </span>
+                          <span className="text-xs text-slate-400">{vehicle.division ?? "Unassigned"}</span>
                         </td>
                         <td className="px-3 py-3 sm:px-5 sm:py-3.5">
                           <Badge tone={isCompany ? "blue" : "yellow"}>
