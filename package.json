@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "cars24:fetch": "node vehicle-info/scripts/fetch-cars24-info.mjs"
+    "cars24:fetch": "node vehicle-info/scripts/fetch-cars24-info.mjs",
+    "rto:refresh": "node --env-file=.env.local scripts/refresh-rto-local.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

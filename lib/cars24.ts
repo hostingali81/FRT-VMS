@@ -12,11 +12,24 @@
 const API = (reg: string) =>
   `https://cars-consumer.cars24.team/api/v1/product/service-history?regNumber=${encodeURIComponent(reg)}`;
 
+// Full browser-like fingerprint: Cloudflare in front of cars24.team challenges
+// requests from datacenter IPs (Vercel gets HTTP 403), and a complete mobile
+// Chrome header set lowers the bot score. May still be blocked by IP reputation
+// alone — scripts/refresh-rto-local.mjs is the reliable fallback in that case.
 const HEADERS = {
   "x-client-type": "MWEB",
-  accept: "application/json",
+  accept: "application/json, text/plain, */*",
+  "accept-language": "en-IN,en;q=0.9,hi;q=0.8",
+  origin: "https://www.cars24.com",
+  referer: "https://www.cars24.com/",
   "user-agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  "sec-ch-ua-mobile": "?1",
+  "sec-ch-ua-platform": '"Android"',
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "cross-site",
 };
 
 const TIMEOUT_MS = Number(process.env.CARS24_TIMEOUT_MS ?? 12000);
