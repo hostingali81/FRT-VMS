@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
+import { getAllLookups, getVehicles } from "@/lib/data";
+import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { isMillitrackConfigured, millitrackSummary } from "@/lib/millitrack";
 import { syncMonthlyGpsDistance } from "@/lib/gps-distance";
@@ -110,16 +112,36 @@ export async function syncGpsDistanceAction() {
 }
 
 /**
- * Sync monthly GPS distance for every GPS-mapped vehicle (independent of fuel logs).
- * Builds month-wise history in vehicle_gps_distance. super_admin only.
+ * Sync monthly GPS distance for GPS-mapped vehicles (independent of fuel logs).
+ * Builds month-wise history in vehicle_gps_distance.
+ *
+ * Open to roles that can create/edit vehicles (super_admin, circle_incharge,
+ * division_incharge). Permission-scoped like the RTO refresh: super_admin syncs
+ * the whole fleet, while circle/division incharge sync only the vehicles they can
+ * edit, so they never touch another location's data.
  */
 export async function syncGpsMonthlyDistanceAction() {
   const profile = await requireProfile();
-  if (profile.role !== "super_admin") {
-    throw new Error("Unauthorized: only super_admin can sync GPS distance");
+  if (!canCreateVehicle(profile)) {
+    throw new Error("Unauthorized: you don't have permission to sync GPS distance");
   }
 
-  const result = await syncMonthlyGpsDistance();
+  // super_admin: no filter → whole GPS-mapped fleet (same as the daily cron).
+  // Other roles: restrict to the vehicles they can edit.
+  let allowedIds: Set<string> | null = null;
+  if (profile.role !== "super_admin") {
+    const lookups = await getAllLookups();
+    const vehicles = await getVehicles(profile);
+    const editable = vehicles.filter(
+      (vehicle) => vehicle.status !== "removed" && canEditVehicle(profile, vehicle, lookups),
+    );
+    if (editable.length === 0) {
+      redirect("/fuel?msync=error&reason=" + encodeURIComponent("You don't have any vehicles to sync"));
+    }
+    allowedIds = new Set(editable.map((vehicle) => vehicle.vehicle_id));
+  }
+
+  const result = await syncMonthlyGpsDistance(allowedIds);
 
   revalidatePath("/fuel");
   if (!result.ok) {

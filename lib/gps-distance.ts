@@ -16,6 +16,11 @@ import { isWheelsEyeConfigured, wheelsEyeDistanceByReg } from "@/lib/wheelseye";
  * On the 1st–2nd we also re-sync the just-ended previous month to finalize it.
  *
  * Shared by the manual button (server action) and the daily Vercel cron route.
+ *
+ * `allowedVehicleIds` scopes the sync: when a Set is passed, only those vehicle
+ * ids are synced (used by non-admin roles so a circle/division incharge refreshes
+ * only their own vehicles). Pass null/undefined (cron, super_admin) to sync the
+ * whole GPS-mapped fleet.
  */
 export type MonthlySyncResult = {
   ok: boolean;
@@ -35,7 +40,9 @@ const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const istMonthStart = (year: number, monthIdx: number) => new Date(Date.UTC(year, monthIdx, 1) - IST_OFFSET_MS);
 
-export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
+export async function syncMonthlyGpsDistance(
+  allowedVehicleIds?: Set<string> | null,
+): Promise<MonthlySyncResult> {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return { ok: false, reason: "Database connection not available", vehicles: 0, months: 0, failed: 0 };
 
@@ -45,7 +52,8 @@ export async function syncMonthlyGpsDistance(): Promise<MonthlySyncResult> {
     .not("gps_device_id", "is", null);
   if (error) return { ok: false, reason: error.message, vehicles: 0, months: 0, failed: 0 };
 
-  const all = vehicles ?? [];
+  // Scope to the caller's vehicles when an allow-set is given; otherwise sync all.
+  const all = (vehicles ?? []).filter((v) => !allowedVehicleIds || allowedVehicleIds.has(v.id));
   const millitrack = all.filter((v) => v.gps_company === "VehicleStep" && /^\d+$/.test(String(v.gps_device_id).trim()));
   const wheelseye = all.filter((v) => v.gps_company === "WheelsEye");
 

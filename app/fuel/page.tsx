@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getFuelLogsForMonth, getGpsDistanceForMonth, getVehicles } from "@/lib/data";
-import { canEditVehicle } from "@/lib/permissions";
+import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
 import { syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
 
@@ -75,7 +75,9 @@ export default async function FuelDashboardPage({
   const companyKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
   const grandAvg = grandLitres > 0 && companyKm > 0 ? +(companyKm / grandLitres).toFixed(1) : null;
 
-  const isSuperAdmin = profile.role === "super_admin";
+  // GPS sync is open to vehicle managers; the action itself scopes each role to
+  // the vehicles it can edit (super_admin syncs the whole fleet).
+  const canSyncGps = canCreateVehicle(profile);
   const canAddFuel = profile.role !== "viewer";
 
   const syncBanner = (() => {
@@ -105,7 +107,7 @@ export default async function FuelDashboardPage({
             Add Fuel
           </LinkButton>
         )}
-        {isSuperAdmin && (
+        {canSyncGps && (
           <form action={syncGpsMonthlyDistanceAction}>
             <SubmitButton variant="outline">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
