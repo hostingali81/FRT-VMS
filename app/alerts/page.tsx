@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, CarFront, CheckCircle2, IdCard, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, IdCard, RefreshCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
@@ -13,54 +13,54 @@ import { getAlertsData, preloadDriverData, preloadFleetData } from "@/lib/data";
 import { canCreateVehicle } from "@/lib/permissions";
 import { refreshRtoDocumentsAction } from "@/lib/actions/cars24-actions";
 import { daysUntil, getWorstDocumentState } from "@/lib/utils/expiry";
-import type { DriverShift } from "@/lib/types";
 import { cn } from "@/lib/utils/cn";
 
 export const dynamic = "force-dynamic";
 // Allow up to 60s for the RTO refresh (one Cars24 call per editable vehicle, batched).
 export const maxDuration = 60;
 
-const SHIFT_LABELS: Record<DriverShift, string> = {
-  shift_a: "Shift A",
-  shift_b: "Shift B",
-  shift_c: "Shift C",
-};
-
 export default async function AlertsPage({
   searchParams,
 }: {
   searchParams: {
     rto?: string;
-    checked?: string;
-    updated?: string;
-    unchanged?: string;
-    nodata?: string;
-    failed?: string;
-    reason?: string;
+    rtoChecked?: string;
+    rtoUpdated?: string;
+    rtoUnchanged?: string;
+    rtoNodata?: string;
+    rtoFailed?: string;
+    rtoReason?: string;
   };
 }) {
   // Start the data queries while the auth round trips are still in flight.
   preloadFleetData();
   preloadDriverData();
   const profile = await requireProfile();
-  const { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers } = await getAlertsData(profile);
+  const { documentAlerts, driverLicenseAlerts } = await getAlertsData(profile);
 
   const canRefresh = canCreateVehicle(profile);
 
   const rtoBanner = (() => {
     if (searchParams.rto === "ok") {
+      const updatedCount = Number(searchParams.rtoUpdated) || 0;
+      const failedCount = Number(searchParams.rtoFailed) || 0;
       const detail: string[] = [];
-      if (Number(searchParams.unchanged) > 0) detail.push(`${searchParams.unchanged} already up to date`);
-      if (Number(searchParams.nodata) > 0) detail.push(`${searchParams.nodata} no RTO record`);
-      if (Number(searchParams.failed) > 0) detail.push(`${searchParams.failed} failed`);
+      if (Number(searchParams.rtoUnchanged) > 0) detail.push(`${searchParams.rtoUnchanged} already up to date`);
+      if (Number(searchParams.rtoNodata) > 0) detail.push(`${searchParams.rtoNodata} no RTO record`);
+      if (failedCount > 0) detail.push(`${failedCount} failed`);
       const suffix = detail.length ? ` (${detail.join(", ")})` : "";
+      const failureReason = failedCount > 0 && searchParams.rtoReason ? ` Error: ${searchParams.rtoReason}` : "";
+      // Nothing updated and at least one failure is a failed run — show it red.
+      const isFailure = failedCount > 0 && updatedCount === 0;
       return {
-        tone: "success" as const,
-        message: `RTO refresh complete — ${searchParams.updated ?? 0} of ${searchParams.checked ?? 0} vehicles updated${suffix}.`,
+        tone: isFailure ? ("error" as const) : ("success" as const),
+        message: isFailure
+          ? `RTO refresh failed — 0 of ${searchParams.rtoChecked ?? 0} vehicles updated${suffix}.${failureReason}`
+          : `RTO refresh complete — ${updatedCount} of ${searchParams.rtoChecked ?? 0} vehicles updated${suffix}.${failureReason}`,
       };
     }
     if (searchParams.rto === "error") {
-      return { tone: "error" as const, message: `RTO refresh failed: ${searchParams.reason ?? "unknown error"}` };
+      return { tone: "error" as const, message: `RTO refresh failed: ${searchParams.rtoReason ?? "unknown error"}` };
     }
     return null;
   })();
@@ -103,15 +103,14 @@ export default async function AlertsPage({
       {rtoBanner && <DismissibleBanner tone={rtoBanner.tone} message={rtoBanner.message} />}
 
       <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-        {/* Summary — three clear stat cards */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Summary — two clear stat cards */}
+        <div className="grid grid-cols-2 gap-3">
           <SummaryStat value={totalExpired} label="Expired" urgent />
           <SummaryStat value={totalExpiring} label="Expiring soon" />
-          <SummaryStat value={vehiclesWithoutAllDrivers.length} label="Short-staffed" />
         </div>
 
-        {/* Alert lists — single column on mobile, three across on wide screens */}
-        <div className="grid gap-4 xl:grid-cols-3">
+        {/* Alert lists — single column on mobile, two across on wide screens */}
+        <div className="grid gap-4 xl:grid-cols-2">
         <AlertCard icon={AlertTriangle} title="Vehicle Documents" count={documentAlerts.length} expiredCount={expiredDocCount}>
           {sortedDocAlerts.length === 0 ? (
             <ClearState message="All vehicle documents are in order" />
@@ -124,10 +123,13 @@ export default async function AlertsPage({
                     <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
                       {vehicle.registration_no}
                     </Link>
-                    {(vehicle.current_circle || vehicle.division) && (
+                    {(vehicle.current_circle || vehicle.division || vehicle.substation) && (
                       <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {[vehicle.current_circle, vehicle.division].filter(Boolean).join(" › ")}
+                        {[vehicle.current_circle, vehicle.division, vehicle.substation].filter(Boolean).join(" › ")}
                       </p>
+                    )}
+                    {vehicle.vendor_name && (
+                      <p className="mt-0.5 truncate text-xs text-slate-500">Vendor: {vehicle.vendor_name}</p>
                     )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <ExpiryBadge label="Insurance" date={vehicle.insurance_expiry} />
@@ -166,31 +168,6 @@ export default async function AlertsPage({
           )}
         </AlertCard>
 
-        <AlertCard icon={CarFront} title="Driver Coverage" count={vehiclesWithoutAllDrivers.length} expiredCount={0}>
-          {vehiclesWithoutAllDrivers.length === 0 ? (
-            <ClearState message="All vehicles have complete shift coverage" />
-          ) : (
-            <div className="space-y-2">
-              {vehiclesWithoutAllDrivers.map((vehicle) => (
-                <AlertRow key={vehicle.vehicle_id} severity="expiring">
-                  <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
-                    {vehicle.registration_no}
-                  </Link>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">
-                    {[vehicle.division, vehicle.substation].filter(Boolean).join(" › ") || "Unassigned"}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {vehicle.missingShifts.map((shift) => (
-                      <Badge key={shift} tone="yellow">
-                        {SHIFT_LABELS[shift]} vacant
-                      </Badge>
-                    ))}
-                  </div>
-                </AlertRow>
-              ))}
-            </div>
-          )}
-        </AlertCard>
         </div>
       </div>
     </AppShell>

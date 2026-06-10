@@ -97,14 +97,23 @@ export default async function FuelDashboardPage({
 
   const syncBanner = (() => {
     if (searchParams.msync === "ok") {
+      const vehiclesCount = Number(searchParams.vehicles) || 0;
+      const failedCount = Number(searchParams.failed) || 0;
       const range =
         searchParams.from && searchParams.to
           ? ` · data from ${fmtIST(searchParams.from)} to ${fmtIST(searchParams.to)} (IST)`
           : "";
-      const failedPart = Number(searchParams.failed) > 0 ? `, ${searchParams.failed} failed` : "";
+      const failedPart = failedCount > 0 ? `, ${failedCount} failed` : "";
+      // Every vehicle failing is a failed sync, not a success — show it red.
+      if (failedCount > 0 && vehiclesCount === 0) {
+        return {
+          tone: "error" as const,
+          message: `GPS sync failed — 0 vehicles updated, ${failedCount} failed.`,
+        };
+      }
       return {
         tone: "success" as const,
-        message: `GPS data synced — ${searchParams.vehicles ?? 0} vehicles updated${range}${failedPart}.`,
+        message: `GPS data synced — ${vehiclesCount} vehicles updated${range}${failedPart}.`,
       };
     }
     if (searchParams.msync === "error") {

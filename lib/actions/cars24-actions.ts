@@ -33,20 +33,21 @@ export async function refreshRtoDocumentsAction() {
 
   if (editable.length === 0) {
     redirect(
-      "/alerts?rto=error&reason=" +
+      "/alerts?rto=error&rtoReason=" +
         encodeURIComponent("You don't have any vehicles to refresh"),
     );
   }
 
   const supabase = createSupabaseAdminClient();
   if (!supabase) {
-    redirect("/alerts?rto=error&reason=" + encodeURIComponent("Database connection not available"));
+    redirect("/alerts?rto=error&rtoReason=" + encodeURIComponent("Database connection not available"));
   }
 
   let updated = 0;
   let unchanged = 0;
   let noData = 0;
   let failed = 0;
+  const failureReasons: string[] = [];
 
   for (let i = 0; i < editable.length; i += CONCURRENCY) {
     const batch = editable.slice(i, i + CONCURRENCY);
@@ -80,7 +81,9 @@ export async function refreshRtoDocumentsAction() {
           if (error) throw new Error(error.message);
           updated += 1;
         } catch (e) {
-          console.error(`[cars24] ${vehicle.registration_no}:`, e instanceof Error ? e.message : e);
+          const message = e instanceof Error ? `${e.name === "TimeoutError" ? "timed out" : e.message}` : String(e);
+          console.error(`[cars24] ${vehicle.registration_no}:`, message);
+          failureReasons.push(message);
           failed += 1;
         }
       }),
@@ -90,8 +93,22 @@ export async function refreshRtoDocumentsAction() {
   revalidatePath("/alerts");
   revalidatePath("/vehicles");
   revalidatePath("/dashboard");
+  // Surface the most common failure reason so the banner says WHY calls failed
+  // (e.g. "timed out" vs "non-JSON response (HTTP 403)"), not just how many.
+  const reasonParam =
+    failed > 0 && failureReasons.length > 0
+      ? `&rtoReason=${encodeURIComponent(mostCommon(failureReasons).slice(0, 120))}`
+      : "";
+  // Params are rto-prefixed so they never collide with the generic toast params
+  // (a bare `updated=0` would fire the "Vehicle updated" success toast).
   redirect(
-    `/alerts?rto=ok&checked=${editable.length}&updated=${updated}` +
-      `&unchanged=${unchanged}&nodata=${noData}&failed=${failed}`,
+    `/alerts?rto=ok&rtoChecked=${editable.length}&rtoUpdated=${updated}` +
+      `&rtoUnchanged=${unchanged}&rtoNodata=${noData}&rtoFailed=${failed}${reasonParam}`,
   );
+}
+
+function mostCommon(values: string[]) {
+  const counts = new Map<string, number>();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
 }

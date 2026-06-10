@@ -100,23 +100,37 @@ export function extractRtoDocuments(detail: Cars24Detail | null): RtoDocuments {
   return docs;
 }
 
-/**
- * Fetch the Cars24 detail object for a registration number. Throws on a
- * non-JSON response or network/timeout error so the caller can count it as a
- * failure and move on.
- */
-export async function fetchCars24Detail(reg: string): Promise<Cars24Detail | null> {
-  const res = await fetch(API(normalizeRegistration(reg)), {
+async function fetchCars24Once(url: string): Promise<Cars24Detail | null> {
+  const res = await fetch(url, {
     headers: HEADERS,
     signal: AbortSignal.timeout(TIMEOUT_MS),
     cache: "no-store",
   });
   const text = await res.text();
+  // Cloudflare 5xx pages are JSON too, so status must be checked first — they
+  // would otherwise parse fine, yield no detail, and miscount as "no record".
+  if (res.status >= 500) throw new Error(`Cars24 server error (HTTP ${res.status})`);
   let json: { vehicleResponseDto?: { detail?: Cars24Detail | null } };
   try {
     json = JSON.parse(text);
   } catch {
     throw new Error(`non-JSON response (HTTP ${res.status})`);
   }
+  // 404 = Cars24 has no record for this registration; the caller counts it as noData.
   return json?.vehicleResponseDto?.detail ?? null;
+}
+
+/**
+ * Fetch the Cars24 detail object for a registration number. Retries once on
+ * failure (their origin intermittently 504s), then throws so the caller can
+ * count it as a failure and move on.
+ */
+export async function fetchCars24Detail(reg: string): Promise<Cars24Detail | null> {
+  const url = API(normalizeRegistration(reg));
+  try {
+    return await fetchCars24Once(url);
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return fetchCars24Once(url);
+  }
 }

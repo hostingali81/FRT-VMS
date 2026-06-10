@@ -16,7 +16,6 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { accessibleCircleIds, accessibleDivisionIds, canSeeVehicle, filterLookupsForProfile } from "@/lib/permissions";
 import {
-  DRIVER_SHIFTS,
   type ActivityItem,
   type AdminUserRow,
   type Circle,
@@ -26,7 +25,6 @@ import {
   type DriverAssignment,
   type DriverOwnershipHistoryItem,
   type DriverRecord,
-  type DriverShift,
   type FleetVehicle,
   type FuelLogEntry,
   type FuelOwnershipHistoryItem,
@@ -267,41 +265,6 @@ export async function getDriverAssignments(vehicleId: string, profile?: UserProf
     .order("from_date", { ascending: false });
 
   if (error || !data) return mockDriverAssignments.filter((item) => item.vehicle_id === vehicleId);
-
-  return data.map((row) => {
-    const driver = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
-    return {
-      id: row.id,
-      vehicle_id: row.vehicle_id,
-      driver_id: row.driver_id,
-      driver_name: driver?.name ?? "Unknown driver",
-      mobile: driver?.mobile ?? null,
-      license_no: driver?.license_no ?? null,
-      shift: row.shift as DriverAssignment["shift"],
-      from_date: row.from_date,
-      to_date: row.to_date,
-      remarks: row.remarks,
-    };
-  });
-}
-
-async function getCurrentDriverAssignmentsForVehicles(vehicleIds: string[]) {
-  if (vehicleIds.length === 0) return [];
-
-  const supabase = createSupabaseAdminClient();
-  if (!supabase) {
-    return mockDriverAssignments.filter((item) => vehicleIds.includes(item.vehicle_id) && !item.to_date);
-  }
-
-  const { data, error } = await supabase
-    .from("driver_assignments")
-    .select("id,vehicle_id,driver_id,shift,from_date,to_date,remarks,drivers(name,mobile,license_no)")
-    .in("vehicle_id", vehicleIds)
-    .is("to_date", null);
-
-  if (error || !data) {
-    return mockDriverAssignments.filter((item) => vehicleIds.includes(item.vehicle_id) && !item.to_date);
-  }
 
   return data.map((row) => {
     const driver = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
@@ -607,7 +570,6 @@ export async function getDashboardData(profile?: UserProfile | null) {
 
 export async function getAlertsData(profile?: UserProfile | null) {
   const [vehicles, drivers] = await Promise.all([getVehicles(profile), getDrivers(profile)]);
-  const assignments = await getCurrentDriverAssignmentsForVehicles(vehicles.map((vehicle) => vehicle.vehicle_id));
 
   const documentAlerts = vehicles.filter((vehicle) =>
     ["expiring", "expired"].includes(
@@ -619,20 +581,7 @@ export async function getAlertsData(profile?: UserProfile | null) {
     ["expiring", "expired"].includes(getWorstDocumentState([driver.license_expiry])),
   );
 
-  const vehiclesWithoutAllDrivers = vehicles
-    .filter((vehicle) => {
-      const activeAssignments = assignments.filter((a) => a.vehicle_id === vehicle.vehicle_id && !a.to_date);
-      const shifts = new Set(activeAssignments.map((a) => a.shift));
-      return vehicle.status !== "removed" && shifts.size < 3;
-    })
-    .map((vehicle) => {
-      const activeAssignments = assignments.filter((a) => a.vehicle_id === vehicle.vehicle_id && !a.to_date);
-      const filledShifts = new Set(activeAssignments.map((a) => a.shift));
-      const missingShifts = (DRIVER_SHIFTS as readonly DriverShift[]).filter((s) => !filledShifts.has(s));
-      return { ...vehicle, missingShifts };
-    });
-
-  return { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers };
+  return { documentAlerts, driverLicenseAlerts };
 }
 
 export async function getAdminUsers(): Promise<AdminUserRow[]> {

@@ -96,7 +96,7 @@ export async function createVehicleAction(formData: FormData) {
 
   revalidatePath("/vehicles");
   revalidatePath("/dashboard");
-  redirect(`/vehicles/${vehicle.id}`);
+  redirect(`/vehicles/${vehicle.id}?vcreated=1`);
 }
 
 export async function updateVehicleAction(formData: FormData) {
