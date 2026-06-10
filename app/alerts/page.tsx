@@ -1,23 +1,18 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, IdCard, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, IdCard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requireProfile } from "@/lib/auth";
 import { getAlertsData, preloadDriverData, preloadFleetData } from "@/lib/data";
-import { canCreateVehicle } from "@/lib/permissions";
-import { refreshRtoDocumentsAction } from "@/lib/actions/cars24-actions";
 import { daysUntil, getWorstDocumentState } from "@/lib/utils/expiry";
 import { cn } from "@/lib/utils/cn";
 
 export const dynamic = "force-dynamic";
-// Allow up to 60s for the RTO refresh (one Cars24 call per editable vehicle, batched).
-export const maxDuration = 60;
 
 export default async function AlertsPage({
   searchParams,
@@ -37,8 +32,6 @@ export default async function AlertsPage({
   preloadDriverData();
   const profile = await requireProfile();
   const { documentAlerts, driverLicenseAlerts } = await getAlertsData(profile);
-
-  const canRefresh = canCreateVehicle(profile);
 
   const rtoBanner = (() => {
     if (searchParams.rto === "ok") {
@@ -88,16 +81,10 @@ export default async function AlertsPage({
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor">
-        {canRefresh && (
-          <form action={refreshRtoDocumentsAction}>
-            <SubmitButton variant="outline">
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Refresh from RTO
-            </SubmitButton>
-          </form>
-        )}
-      </PageHeader>
+      {/* "Refresh from RTO" button is hidden for now: Cloudflare blocks the
+          Cars24 API from Vercel's IPs (HTTP 403). Documents are refreshed via
+          `npm run rto:refresh` locally until a server-side alternative exists. */}
+      <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor" />
 
       {/* RTO refresh result banner — auto-dismisses after a few seconds */}
       {rtoBanner && <DismissibleBanner tone={rtoBanner.tone} message={rtoBanner.message} />}
