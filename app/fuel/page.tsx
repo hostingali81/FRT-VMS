@@ -55,6 +55,11 @@ export default async function FuelDashboardPage({
   const gpsKmByVehicle = new Map<string, number>();
   for (const row of gpsDistance) gpsKmByVehicle.set(row.vehicle_id, row.distance_km);
 
+  const frtSortKey = (frt_no: string | null | undefined) => {
+    const match = frt_no?.match(/\d+/);
+    return match ? parseInt(match[0], 10) : Number.POSITIVE_INFINITY;
+  };
+
   const rows = activeVehicles.map((v) => {
     const logs = logsByVehicle.get(v.vehicle_id) ?? [];
     const totalLitres = logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0);
@@ -65,7 +70,7 @@ export default async function FuelDashboardPage({
     const hasGps = Boolean(v.gps_device_id);
     const canManage = canEditVehicle(profile, v, lookups);
     return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, avg, hasGps, canManage };
-  });
+  }).sort((a, b) => frtSortKey(a.vehicle.frt_no) - frtSortKey(b.vehicle.frt_no));
 
   const companyRows = rows.filter((r) => r.vehicle.fuel_ownership === "company");
   const grandLitres = companyRows.reduce((sum, r) => sum + r.totalLitres, 0);
