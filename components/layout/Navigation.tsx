@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import {
   AlertTriangle,
   CarFront,
+  CircleUserRound,
   ClipboardList,
   Droplets,
   Gauge,
@@ -29,7 +30,17 @@ const navItems = [
   { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
   { href: "/vehicle-history", label: "Vehicle History", icon: History },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+  { href: "/profile", label: "Profile", icon: CircleUserRound },
   { href: "/admin", label: "Admin", icon: Settings },
+];
+
+// Four primary destinations surfaced as a fixed bottom bar on mobile for
+// one-tap access. Everything else stays in the hamburger drawer.
+const bottomNavItems = [
+  { href: "/fuel", label: "Fuel", icon: Droplets },
+  { href: "/vehicles", label: "Vehicles", icon: CarFront },
+  { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -194,5 +205,56 @@ export function MobileNav({ showAdmin }: { showAdmin: boolean }) {
         </div>
       </div>
     </div>
+  );
+}
+
+export function BottomNav() {
+  const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur pb-[env(safe-area-inset-bottom)] lg:hidden"
+      aria-label="Primary"
+    >
+      <div className="grid grid-cols-4">
+        {bottomNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(pathname, item.href);
+          const pending = pendingHref === item.href && !active;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              prefetch
+              onClick={() => { if (!active) setPendingHref(item.href); }}
+              aria-current={active ? "page" : undefined}
+              className="flex flex-col items-center gap-1 py-2 text-[11px] font-medium text-slate-500"
+            >
+              <span
+                className={cn(
+                  "flex h-8 w-16 items-center justify-center rounded-full transition-colors",
+                  active || pending ? "bg-slate-950 text-white" : "text-slate-500",
+                )}
+              >
+                {pending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                )}
+              </span>
+              <span className={cn(active || pending ? "text-slate-950" : "text-slate-500")}>
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

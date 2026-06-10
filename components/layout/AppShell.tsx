@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatScope, requireProfile, ROLE_LABELS } from "@/lib/auth";
-import { LogoutButton, MobileNav, SidebarNav } from "@/components/layout/Navigation";
+import { BottomNav, LogoutButton, MobileNav, SidebarNav } from "@/components/layout/Navigation";
 import { getLookups } from "@/lib/data";
 import { canOpenAdmin } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
@@ -31,18 +31,19 @@ export async function AppShell({ children, profile }: { children: ReactNode; pro
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <MobileNav showAdmin={showAdmin} />
-              <div className="min-w-0">
+              <Link href="/profile" className="min-w-0 rounded-md outline-none transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-slate-300">
                 <p className="truncate text-xs font-semibold uppercase text-slate-500 lg:hidden">FRT-VMS</p>
                 <p className="truncate text-sm font-semibold text-slate-950">{formatScope(activeProfile, lookups)}</p>
                 <p className="hidden truncate text-xs text-slate-500 sm:block">
                   {activeProfile.name} / {ROLE_LABELS[activeProfile.role]}
                 </p>
-              </div>
+              </Link>
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main className="pb-20 lg:pb-0">{children}</main>
       </div>
+      <BottomNav />
     </div>
   );
 }

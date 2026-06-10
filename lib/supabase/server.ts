@@ -65,3 +65,16 @@ export function createSupabaseAdminClient() {
 
   return adminClient;
 }
+
+// Checks a password without touching the caller's session. Used to confirm the
+// current password before a self-service password change. The standalone client
+// persists nothing, so verifying never rotates or clears the active cookies.
+export async function verifyUserPassword(email: string, password: string) {
+  if (!supabaseUrl || !supabaseAnonKey) return false;
+
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  return !error;
+}

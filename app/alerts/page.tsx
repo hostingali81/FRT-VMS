@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, IdCard } from "lucide-react";
+import { AlertTriangle, CheckCircle2, IdCard, MapPin, Phone } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
@@ -107,16 +107,20 @@ export default async function AlertsPage({
                 const worstState = getWorstDocumentState([vehicle.insurance_expiry, vehicle.fitness_expiry, vehicle.pollution_expiry]);
                 return (
                   <AlertRow key={vehicle.vehicle_id} severity={worstState as "expired" | "expiring"}>
-                    <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
-                      {vehicle.registration_no}
-                    </Link>
+                    <div className="flex flex-wrap items-baseline gap-x-1.5">
+                      <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
+                        {vehicle.registration_no}
+                      </Link>
+                      {vehicle.vendor_name && (
+                        <span className="text-sm font-medium text-slate-500">({vehicle.vendor_name})</span>
+                      )}
+                    </div>
                     {(vehicle.current_circle || vehicle.division || vehicle.substation) && (
-                      <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {[vehicle.current_circle, vehicle.division, vehicle.substation].filter(Boolean).join(" › ")}
-                      </p>
-                    )}
-                    {vehicle.vendor_name && (
-                      <p className="mt-0.5 truncate text-xs text-slate-500">Vendor: {vehicle.vendor_name}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <MetaChip icon={MapPin}>
+                          {[vehicle.current_circle, vehicle.division, vehicle.substation].filter(Boolean).join(" › ")}
+                        </MetaChip>
+                      </div>
                     )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <ExpiryBadge label="Insurance" date={vehicle.insurance_expiry} />
@@ -141,10 +145,12 @@ export default async function AlertsPage({
                 return (
                   <AlertRow key={driver.driver_id} severity={severity}>
                     <p className="font-semibold text-slate-950">{driver.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {driver.circle}
-                      {driver.mobile ? ` · ${driver.mobile}` : ""}
-                    </p>
+                    {(driver.circle || driver.mobile) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {driver.circle && <MetaChip icon={MapPin}>{driver.circle}</MetaChip>}
+                        {driver.mobile && <MetaChip icon={Phone}>{driver.mobile}</MetaChip>}
+                      </div>
+                    )}
                     <div className="mt-2">
                       <ExpiryBadge label="License" date={driver.license_expiry} />
                     </div>
@@ -230,6 +236,27 @@ function AlertRow({ severity, children }: { severity: "expired" | "expiring"; ch
     >
       {children}
     </div>
+  );
+}
+
+// Readable meta tag for location/vendor/contact info — a subtle ring chip with
+// a muted icon and dark, semibold value so the substation and vendor names are
+// easy to scan rather than fading into light-gray body text.
+function MetaChip({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs ring-1 ring-inset ring-slate-200">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+      {label ? <span className="font-medium text-slate-500">{label}</span> : null}
+      <span className="break-words font-semibold text-slate-800">{children}</span>
+    </span>
   );
 }
 

@@ -40,6 +40,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   "division-create": "Could not create the division",
   "substation-required": "Substation name and division are required",
   "substation-create": "Could not create the substation",
+  "name-required": "Name is required",
+  "name-update": "Could not update your name",
+  "password-required": "Enter your current and new password",
+  "password-mismatch": "New passwords do not match",
+  "password-wrong": "Current password is incorrect",
+  "password-update": "Could not change your password",
 };
 
 export function ToastProvider() {
@@ -59,6 +65,10 @@ export function ToastProvider() {
     const user = searchParams.get("user");
     if (user === "created") toast.success("User created successfully");
     if (user === "updated") toast.success("User updated successfully");
+
+    const profile = searchParams.get("profile");
+    if (profile === "name-updated") toast.success("Name updated successfully");
+    if (profile === "password-updated") toast.success("Password changed successfully");
     if (searchParams.get("zone") === "created") toast.success("Zone created successfully");
     if (searchParams.get("circle") === "created") toast.success("Circle created successfully");
     if (searchParams.get("division") === "created") toast.success("Division created successfully");
