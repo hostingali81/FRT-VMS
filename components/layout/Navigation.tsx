@@ -99,12 +99,15 @@ export function LogoutButton({ mobile = false }: { mobile?: boolean }) {
       <button
         type="submit"
         className={cn(
-          "flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-3 font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-950",
-          mobile ? "py-3 text-base" : "py-2 text-sm",
+          "group flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200",
+          mobile ? "py-3 text-base" : "py-2.5 text-sm",
         )}
       >
-        <LogOut className={mobile ? "h-5 w-5" : "h-4 w-4"} aria-hidden="true" />
-        Logout
+        <LogOut
+          className={cn("transition-transform group-hover:-translate-x-0.5", mobile ? "h-5 w-5" : "h-4 w-4")}
+          aria-hidden="true"
+        />
+        Sign out
       </button>
     </form>
   );

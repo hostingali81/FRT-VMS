@@ -1,7 +1,12 @@
-/* FRT-VMS service worker — enables installability + caches static assets.
+/* FRT-VMS service worker — installability + static asset caching + update flow.
    Dynamic pages and API/Supabase/GPS calls always go to the network (never cached),
-   so authed data is never stale. */
-const CACHE = "frtvms-static-v1";
+   so authed data is never stale.
+
+   To push an update to everyone who already installed the PWA: bump VERSION.
+   Changing this file's bytes makes the browser detect a new worker, which then
+   waits and the app shows an "Update available" prompt (see ServiceWorkerRegistrar). */
+const VERSION = "v2";
+const CACHE = `frtvms-static-${VERSION}`;
 const PRECACHE = [
   "/icon-192.png",
   "/icon-512.png",
@@ -10,9 +15,9 @@ const PRECACHE = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()),
-  );
+  // Intentionally NO skipWaiting() here: the new worker waits so the app can
+  // show an update prompt. It activates on demand via the SKIP_WAITING message.
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));
 });
 
 self.addEventListener("activate", (event) => {
@@ -22,6 +27,11 @@ self.addEventListener("activate", (event) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
+});
+
+// The page posts this when the user accepts the "Update available" prompt.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
