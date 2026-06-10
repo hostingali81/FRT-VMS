@@ -31,9 +31,14 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // getSession() reads the cookie locally and only makes a network call when the
+  // access token has expired (to refresh it). This is a routing gate, not an auth
+  // check — every page re-verifies the user via supabase.auth.getUser() in
+  // requireProfile(), so a forged cookie gets past middleware but not the page.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const path = request.nextUrl.pathname;
   const isPublic = publicPaths.some((publicPath) => path === publicPath || path.startsWith(`${publicPath}/`));

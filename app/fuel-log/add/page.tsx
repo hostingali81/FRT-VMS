@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { QuickFuelForm } from "@/components/fuel/QuickFuelForm";
 import { addFuelLogAction } from "@/lib/actions/vehicle-actions";
 import { requireProfile } from "@/lib/auth";
-import { getAllLookups, getVehicles } from "@/lib/data";
+import { getAllLookups, getVehicles, preloadFleetData } from "@/lib/data";
 import { canEditVehicle } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,8 @@ export default async function AddFuelEntryPage({
 }: {
   searchParams: { added?: string; error?: string };
 }) {
+  // Start the fleet queries while the auth round trips are still in flight.
+  preloadFleetData();
   const profile = await requireProfile();
   const [vehicles, lookups] = await Promise.all([getVehicles(profile), getAllLookups()]);
 

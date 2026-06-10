@@ -3,11 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ReportExportButtons } from "@/components/reports/ReportExportButtons";
 import { requireProfile } from "@/lib/auth";
-import { getCircleSummaries, getTransfers, getVehicles } from "@/lib/data";
+import { getCircleSummaries, getTransfers, getVehicles, preloadFleetData, preloadHistoryData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadHistoryData();
   const profile = await requireProfile();
   const [circles, transfers, vehicles] = await Promise.all([getCircleSummaries(profile), getTransfers(profile), getVehicles(profile)]);
 

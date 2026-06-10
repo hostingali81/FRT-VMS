@@ -4,12 +4,14 @@ import { LinkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { VehicleTable } from "@/components/vehicles/VehicleTable";
 import { requireProfile } from "@/lib/auth";
-import { getLookups, getVehicles } from "@/lib/data";
+import { getLookups, getVehicles, preloadFleetData } from "@/lib/data";
 import { canCreateVehicle, canEditVehicle, canInitiateTransfer } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function VehiclesPage() {
+  // Start the fleet queries while the auth round trips are still in flight.
+  preloadFleetData();
   const profile = await requireProfile();
   const [vehicles, lookups] = await Promise.all([getVehicles(profile), getLookups(profile)]);
   const editableVehicleIds = vehicles.filter((vehicle) => canEditVehicle(profile, vehicle, lookups)).map((vehicle) => vehicle.vehicle_id);

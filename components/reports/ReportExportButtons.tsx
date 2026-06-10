@@ -2,7 +2,6 @@
 
 import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
-import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import type { CircleSummary, FleetVehicle, TransferRecord } from "@/lib/types";
 
@@ -25,7 +24,10 @@ const REPORT_LABELS: Record<ReportKey, string> = {
   "division-active": "Division-wise Active Fleet",
 };
 
-function download(sheetData: Record<string, unknown>[], fileName: string) {
+// xlsx is heavy (~1MB parsed), so it is loaded on first export instead of being
+// bundled into the page. The chunk is cached after the first click.
+async function download(sheetData: Record<string, unknown>[], fileName: string) {
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(sheetData);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
@@ -50,7 +52,7 @@ function worstState(dates: Array<string | null>): string {
   return "Not Recorded";
 }
 
-function generateReport(
+async function generateReport(
   key: ReportKey,
   circles: CircleSummary[],
   transfers: TransferRecord[],
@@ -58,7 +60,7 @@ function generateReport(
 ) {
   switch (key) {
     case "circle-deployment":
-      download(
+      await download(
         circles.map((c) => ({
           Circle: c.circle,
           Total: c.total,
@@ -73,7 +75,7 @@ function generateReport(
       break;
 
     case "vehicle-movement":
-      download(
+      await download(
         transfers.map((t) => ({
           "Registration No": t.registration_no,
           "Transfer Date": t.transfer_date,
@@ -93,7 +95,7 @@ function generateReport(
       break;
 
     case "cross-circle":
-      download(
+      await download(
         transfers
           .filter((t) => t.is_cross_circle)
           .map((t) => ({
@@ -113,7 +115,7 @@ function generateReport(
       return;
 
     case "document-compliance":
-      download(
+      await download(
         vehicles
           .filter((v) => v.status !== "removed")
           .map((v) => ({
@@ -130,7 +132,7 @@ function generateReport(
       break;
 
     case "vendor-fleet":
-      download(
+      await download(
         vehicles
           .filter((v) => v.status !== "removed")
           .map((v) => ({
@@ -148,7 +150,7 @@ function generateReport(
       break;
 
     case "division-active":
-      download(
+      await download(
         vehicles
           .filter((v) => v.status === "active")
           .map((v) => ({
@@ -181,7 +183,7 @@ export function ReportExportButtons({
   async function handleClick(key: ReportKey) {
     setLoading(key);
     try {
-      generateReport(key, circles, transfers, vehicles);
+      await generateReport(key, circles, transfers, vehicles);
       if (key !== "driver-duty") toast.success(`${REPORT_LABELS[key]} downloaded`);
     } catch {
       toast.error("Failed to generate report");

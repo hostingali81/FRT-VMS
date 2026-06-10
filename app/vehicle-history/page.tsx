@@ -2,11 +2,14 @@ import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { VehicleHistoryRegister } from "@/components/vehicle-history/VehicleHistoryRegister";
 import { requireProfile } from "@/lib/auth";
-import { getVehicleHistory } from "@/lib/data";
+import { getVehicleHistory, preloadFleetData, preloadHistoryData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function VehicleHistoryPage() {
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadHistoryData();
   const profile = await requireProfile();
   const history = await getVehicleHistory(profile);
 

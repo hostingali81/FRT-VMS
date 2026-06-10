@@ -4,12 +4,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { VehicleForm } from "@/components/vehicles/VehicleForm";
 import { updateVehicleAction } from "@/lib/actions/vehicle-actions";
 import { requireProfile } from "@/lib/auth";
-import { getLookups, getVehicle } from "@/lib/data";
+import { getLookups, getVehicle, preloadFleetData } from "@/lib/data";
 import { canEditVehicle } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditVehiclePage({ params }: { params: { id: string } }) {
+  // Start the fleet queries while the auth round trips are still in flight.
+  preloadFleetData();
   const profile = await requireProfile();
   const [vehicle, lookups] = await Promise.all([getVehicle(params.id, profile), getLookups(profile)]);
   if (!vehicle) notFound();

@@ -4,12 +4,15 @@ import { DriverTable } from "@/components/drivers/DriverTable";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { createDriverAction } from "@/lib/actions/vehicle-actions";
 import { requireProfile } from "@/lib/auth";
-import { getDrivers, getLookups } from "@/lib/data";
+import { getDrivers, getLookups, preloadDriverData, preloadFleetData } from "@/lib/data";
 import { canManageDrivers } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function DriversPage() {
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadDriverData();
   const profile = await requireProfile();
   const [drivers, lookups] = await Promise.all([getDrivers(profile), getLookups(profile)]);
 

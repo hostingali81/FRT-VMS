@@ -8,7 +8,14 @@ import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
-import { getAllLookups, getFuelLogsForMonth, getGpsDistanceForMonth, getVehicles } from "@/lib/data";
+import {
+  getAllLookups,
+  getFuelLogsForMonth,
+  getGpsDistanceForMonth,
+  getVehicles,
+  preloadFleetData,
+  preloadFuelMonthData,
+} from "@/lib/data";
 import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
 import { syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
@@ -31,10 +38,13 @@ export default async function FuelDashboardPage({
     to?: string;
   };
 }) {
-  const profile = await requireProfile();
-
   const currentMonthStr = currentYearMonth();
   const yearMonth = isValidYearMonth(searchParams.m) ? searchParams.m : currentMonthStr;
+
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadFuelMonthData(yearMonth);
+  const profile = await requireProfile();
 
   const [vehicles, fuelLogs, gpsDistance, lookups] = await Promise.all([
     getVehicles(profile),

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -44,15 +44,24 @@ export function createSupabaseServerClient() {
   });
 }
 
+// The admin client carries no request state (no cookies, no user session), so a
+// single module-level instance is shared across all requests. This also lets the
+// underlying fetch agent reuse TCP/TLS connections to Supabase between queries.
+let adminClient: SupabaseClient | null = null;
+
 export function createSupabaseAdminClient() {
   if (!supabaseUrl || !serviceRoleKey) {
     return null;
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  if (!adminClient) {
+    adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
+  return adminClient;
 }

@@ -59,6 +59,41 @@ async function selectRows<T>(view: string, fallback: T[], orderColumn?: string) 
   return data as T[];
 }
 
+// Zero-arg cached raw fetchers. Keeping the cache() on the profile-independent
+// query (rather than only on the profile-keyed wrapper) means the DB round trip
+// dedupes across callers AND can be started before the profile is known.
+const fetchVehicles = cache(() => selectRows<FleetVehicle>("vehicle_current_view", mockVehicles, "registration_no"));
+const fetchTransfers = cache(() => selectRows<TransferRecord>("transfer_history_view", mockTransfers, "transfer_date"));
+const fetchStatusHistory = cache(() => selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date"));
+const fetchDrivers = cache(() => selectRows<DriverRecord>("driver_current_view", mockDrivers, "name"));
+const fetchActivity = cache(() => selectRows<ActivityItem>("activity_feed_view", mockActivity, "created_at"));
+
+function warm(promise: Promise<unknown>) {
+  // Fire-and-forget: the cached promise is awaited later by the real callers.
+  promise.catch(() => {});
+}
+
+// Preload helpers — call BEFORE `await requireProfile()` so these queries run in
+// parallel with the auth round trips instead of after them. The profile is only
+// used to filter rows in JS, so the raw fetches never need to wait for it.
+export function preloadFleetData() {
+  warm(fetchVehicles());
+  warm(getAllLookups());
+}
+
+export function preloadHistoryData() {
+  warm(fetchTransfers());
+  warm(fetchStatusHistory());
+}
+
+export function preloadDriverData() {
+  warm(fetchDrivers());
+}
+
+export function preloadActivityData() {
+  warm(fetchActivity());
+}
+
 export const getAllLookups = cache(async (): Promise<LookupData> => {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return mockLookups;
@@ -86,7 +121,7 @@ export async function getLookups(profile?: UserProfile | null): Promise<LookupDa
 }
 
 export const getVehicles = cache(async (profile?: UserProfile | null): Promise<FleetVehicle[]> => {
-  const vehicles = await selectRows<FleetVehicle>("vehicle_current_view", mockVehicles, "registration_no");
+  const vehicles = await fetchVehicles();
   if (!profile) return vehicles;
 
   const lookups = await getAllLookups();
@@ -165,7 +200,7 @@ export async function getDivisionSummaries(profile?: UserProfile | null): Promis
 }
 
 export const getTransfers = cache(async (profile?: UserProfile | null): Promise<TransferRecord[]> => {
-  const transfers = await selectRows<TransferRecord>("transfer_history_view", mockTransfers, "transfer_date");
+  const transfers = await fetchTransfers();
   if (!profile) return transfers;
 
   const lookups = await getAllLookups();
@@ -182,7 +217,7 @@ export const getTransfers = cache(async (profile?: UserProfile | null): Promise<
 });
 
 export async function getDrivers(profile?: UserProfile | null): Promise<DriverRecord[]> {
-  const drivers = await selectRows<DriverRecord>("driver_current_view", mockDrivers, "name");
+  const drivers = await fetchDrivers();
   if (!profile) return drivers;
 
   const lookups = await getAllLookups();
@@ -200,7 +235,7 @@ export async function getDrivers(profile?: UserProfile | null): Promise<DriverRe
 }
 
 export async function getActivity(profile?: UserProfile | null): Promise<ActivityItem[]> {
-  const rows = await selectRows<ActivityItem>("activity_feed_view", mockActivity, "created_at");
+  const rows = await fetchActivity();
   if (!profile) return rows.slice(0, 10);
 
   const lookups = await getAllLookups();
@@ -330,21 +365,23 @@ export async function getGpsDistanceHistory(vehicleId: string, profile?: UserPro
 }
 
 /** Monthly GPS distance for every vehicle in a given month (for the fuel dashboard KM column). */
-export async function getGpsDistanceForMonth(yearMonth: string): Promise<{ vehicle_id: string; distance_km: number }[]> {
-  const supabase = createSupabaseAdminClient();
-  if (!supabase) return [];
+export const getGpsDistanceForMonth = cache(
+  async (yearMonth: string): Promise<{ vehicle_id: string; distance_km: number }[]> => {
+    const supabase = createSupabaseAdminClient();
+    if (!supabase) return [];
 
-  const { data, error } = await supabase
-    .from("vehicle_gps_distance")
-    .select("vehicle_id,distance_km")
-    .eq("year_month", yearMonth);
+    const { data, error } = await supabase
+      .from("vehicle_gps_distance")
+      .select("vehicle_id,distance_km")
+      .eq("year_month", yearMonth);
 
-  if (error) {
-    console.error("[data.ts] getGpsDistanceForMonth failed:", error.message);
-    return [];
-  }
-  return (data ?? []) as { vehicle_id: string; distance_km: number }[];
-}
+    if (error) {
+      console.error("[data.ts] getGpsDistanceForMonth failed:", error.message);
+      return [];
+    }
+    return (data ?? []) as { vehicle_id: string; distance_km: number }[];
+  },
+);
 
 export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<FuelOwnershipHistoryItem[]> {
   if (profile) {
@@ -412,11 +449,7 @@ export async function getFuelLogs(vehicleId: string, profile?: UserProfile | nul
   return (data ?? []) as FuelLogEntry[];
 }
 
-export async function getFuelLogsForMonth(
-  profile?: UserProfile | null,
-  yearMonth?: string,
-): Promise<FuelLogEntry[]> {
-  const month = yearMonth ?? new Date().toISOString().slice(0, 7);
+const fetchFuelLogsForMonth = cache(async (month: string): Promise<FuelLogEntry[]> => {
   const from = `${month}-01`;
   // Last day of month: go to first of next month minus 1
   const [year, mon] = month.split("-").map(Number);
@@ -425,11 +458,7 @@ export async function getFuelLogsForMonth(
 
   const supabase = createSupabaseAdminClient();
   if (!supabase) {
-    const logs = mockFuelLogs.filter((l) => l.log_date >= from && l.log_date <= to);
-    if (!profile) return logs;
-    const vehicles = await getVehicles(profile);
-    const ids = new Set(vehicles.map((v) => v.vehicle_id));
-    return logs.filter((l) => ids.has(l.vehicle_id));
+    return mockFuelLogs.filter((l) => l.log_date >= from && l.log_date <= to);
   }
 
   const { data, error } = await supabase
@@ -444,7 +473,20 @@ export async function getFuelLogsForMonth(
     return [];
   }
 
-  const allLogs = (data ?? []) as FuelLogEntry[];
+  return (data ?? []) as FuelLogEntry[];
+});
+
+export function preloadFuelMonthData(yearMonth: string) {
+  warm(fetchFuelLogsForMonth(yearMonth));
+  warm(getGpsDistanceForMonth(yearMonth));
+}
+
+export async function getFuelLogsForMonth(
+  profile?: UserProfile | null,
+  yearMonth?: string,
+): Promise<FuelLogEntry[]> {
+  const month = yearMonth ?? new Date().toISOString().slice(0, 7);
+  const allLogs = await fetchFuelLogsForMonth(month);
   if (!profile) return allLogs;
 
   const vehicles = await getVehicles(profile);
@@ -453,7 +495,7 @@ export async function getFuelLogsForMonth(
 }
 
 export const getAllStatusHistory = cache(async (profile?: UserProfile | null): Promise<StatusHistoryItem[]> => {
-  const rows = await selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date");
+  const rows = await fetchStatusHistory();
   if (!profile) return rows;
 
   const vehicles = await getVehicles(profile);

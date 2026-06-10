@@ -8,7 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth";
-import { getDashboardData, getVehicleHistory } from "@/lib/data";
+import {
+  getDashboardData,
+  getVehicleHistory,
+  preloadActivityData,
+  preloadDriverData,
+  preloadFleetData,
+  preloadHistoryData,
+} from "@/lib/data";
 import { canCreateVehicle } from "@/lib/permissions";
 import type { VehicleHistoryItem } from "@/lib/types";
 import { formatDate } from "@/lib/utils/format";
@@ -16,6 +23,11 @@ import { formatDate } from "@/lib/utils/format";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadHistoryData();
+  preloadDriverData();
+  preloadActivityData();
   const profile = await requireProfile();
   const [data, history] = await Promise.all([getDashboardData(profile), getVehicleHistory(profile)]);
 

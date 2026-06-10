@@ -24,6 +24,9 @@ import {
   getStatusHistory,
   getVehicle,
   getVehicleTransfers,
+  preloadDriverData,
+  preloadFleetData,
+  preloadHistoryData,
 } from "@/lib/data";
 import { canEditVehicle, canInitiateTransfer } from "@/lib/permissions";
 
@@ -57,6 +60,10 @@ export default async function VehicleProfilePage({
   params: { id: string };
   searchParams: { tab?: string };
 }) {
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadDriverData();
+  preloadHistoryData();
   const profile = await requireProfile();
   const vehicle = await getVehicle(params.id, profile);
   if (!vehicle) notFound();

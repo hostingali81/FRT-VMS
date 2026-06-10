@@ -6,16 +6,19 @@ import { LinkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
 import { requireProfile } from "@/lib/auth";
-import { getFuelLogsForMonth, getVehicles } from "@/lib/data";
+import { getFuelLogsForMonth, getVehicles, preloadFleetData, preloadFuelMonthData } from "@/lib/data";
 import { formatDate } from "@/lib/utils/format";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
 
 export default async function FuelLogPage({ searchParams }: { searchParams: { m?: string } }) {
-  const profile = await requireProfile();
-
   const yearMonth = isValidYearMonth(searchParams.m) ? searchParams.m : currentYearMonth();
+
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadFuelMonthData(yearMonth);
+  const profile = await requireProfile();
 
   const [fuelLogs, vehicles] = await Promise.all([
     getFuelLogsForMonth(profile, yearMonth),

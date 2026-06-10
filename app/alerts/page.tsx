@@ -9,7 +9,7 @@ import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requireProfile } from "@/lib/auth";
-import { getAlertsData } from "@/lib/data";
+import { getAlertsData, preloadDriverData, preloadFleetData } from "@/lib/data";
 import { canCreateVehicle } from "@/lib/permissions";
 import { refreshRtoDocumentsAction } from "@/lib/actions/cars24-actions";
 import { daysUntil, getWorstDocumentState } from "@/lib/utils/expiry";
@@ -39,6 +39,9 @@ export default async function AlertsPage({
     reason?: string;
   };
 }) {
+  // Start the data queries while the auth round trips are still in flight.
+  preloadFleetData();
+  preloadDriverData();
   const profile = await requireProfile();
   const { documentAlerts, driverLicenseAlerts, vehiclesWithoutAllDrivers } = await getAlertsData(profile);
 
