@@ -22,7 +22,7 @@ import type {
   StatusHistoryItem,
   TransferRecord,
 } from "@/lib/types";
-import { formatDate, titleCase } from "@/lib/utils/format";
+import { formatDate, formatDateTime, titleCase } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 type QuickAction = "status" | "fuel" | "driver" | null;
@@ -647,7 +647,7 @@ export function VehicleProfileTabs({
                         <tr key={row.id} className="hover:bg-slate-50">
                           <td className="px-5 py-3.5 font-medium text-slate-900">{formatYearMonth(row.year_month)}</td>
                           <td className="px-5 py-3.5 text-slate-700">{row.distance_km.toLocaleString("en-IN")} km</td>
-                          <td className="px-5 py-3.5 text-slate-500">{formatDate(row.synced_at)}</td>
+                          <td className="px-5 py-3.5 text-slate-500">{formatDateTime(row.synced_at)}</td>
                         </tr>
                       ))}
                     </tbody>
