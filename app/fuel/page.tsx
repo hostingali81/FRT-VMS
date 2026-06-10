@@ -86,7 +86,10 @@ export default async function FuelDashboardPage({
   const grandLitres = companyRows.reduce((sum, r) => sum + r.totalLitres, 0);
   const grandAmount = companyRows.reduce((sum, r) => sum + r.totalAmount, 0);
   const grandKm = rows.reduce((sum, r) => sum + r.gpsKm, 0);
-  // Average mileage uses company vehicles only (fuel is logged for company-owned vehicles).
+  // "Company distance" and the fleet average count every vehicle the company is
+  // responsible for fuelling (fuel_ownership === "company"), regardless of whether
+  // fuel was logged this month. Vendor-fuelled vehicles are excluded — the company
+  // doesn't fuel them. The average reconciles as companyKm / grandLitres.
   const companyKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
   const grandAvg = grandLitres > 0 && companyKm > 0 ? +(companyKm / grandLitres).toFixed(1) : null;
 
@@ -131,8 +134,10 @@ export default async function FuelDashboardPage({
             Add Fuel
           </LinkButton>
         )}
+        {/* Desktop: Sync lives in the header. On mobile it moves into the empty
+            summary-grid cell below to save vertical space at the top. */}
         {canSyncGps && (
-          <form action={syncGpsMonthlyDistanceAction}>
+          <form action={syncGpsMonthlyDistanceAction} className="hidden sm:block">
             <SubmitButton variant="outline">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               Sync GPS Data
@@ -146,33 +151,23 @@ export default async function FuelDashboardPage({
 
       <MonthNavigator basePath="/fuel" yearMonth={yearMonth} />
 
-      {/* Summary strip — 2×2 stat grid on mobile, inline row on sm+ */}
+      {/* Summary strip — compact 3-col grid on mobile, inline row on sm+ */}
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-1.5">
-          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">
-              {grandKm > 0 ? `${grandKm.toLocaleString("en-IN")} km` : "—"}
-            </span>
-            <span className="text-xs text-slate-500 sm:text-sm">distance (GPS)</span>
-          </span>
-          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">
-              {grandLitres > 0 ? `${grandLitres} L` : "—"}
-            </span>
-            <span className="text-xs text-slate-500 sm:text-sm">total fuel</span>
-          </span>
-          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">
-              {grandAvg !== null ? `${grandAvg} km/L` : "—"}
-            </span>
-            <span className="text-xs text-slate-500 sm:text-sm">average</span>
-          </span>
-          <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="text-base font-bold tabular-nums text-slate-900">
-              {grandAmount > 0 ? `₹${grandAmount.toLocaleString("en-IN")}` : "—"}
-            </span>
-            <span className="text-xs text-slate-500 sm:text-sm">total cost</span>
-          </span>
+        <div className="grid grid-cols-3 gap-x-3 gap-y-2.5 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-1.5">
+          <Stat value={grandKm > 0 ? `${Math.round(grandKm).toLocaleString("en-IN")} km` : "—"} label="total distance" />
+          <Stat value={companyKm > 0 ? `${Math.round(companyKm).toLocaleString("en-IN")} km` : "—"} label="company fuel distance" />
+          <Stat value={grandLitres > 0 ? `${grandLitres} L` : "—"} label="total fuel" />
+          <Stat value={grandAvg !== null ? `${grandAvg} km/L` : "—"} label="average" />
+          <Stat value={grandAmount > 0 ? `₹${grandAmount.toLocaleString("en-IN")}` : "—"} label="total cost" />
+          {/* Fills the empty 6th cell on mobile; the header copy handles sm+ */}
+          {canSyncGps && (
+            <form action={syncGpsMonthlyDistanceAction} className="flex items-center sm:hidden">
+              <SubmitButton variant="outline" className="h-9 w-full gap-1.5 px-2 text-xs">
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                Sync GPS
+              </SubmitButton>
+            </form>
+          )}
         </div>
       </div>
 
@@ -287,6 +282,16 @@ export default async function FuelDashboardPage({
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** Compact summary metric — value above label on mobile, inline on sm+. */
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+      <span className="text-sm font-bold tabular-nums text-slate-900 sm:text-base">{value}</span>
+      <span className="text-[11px] text-slate-500 sm:text-sm">{label}</span>
+    </span>
   );
 }
 
