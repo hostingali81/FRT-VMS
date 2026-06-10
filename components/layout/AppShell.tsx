@@ -27,7 +27,10 @@ export async function AppShell({ children, profile }: { children: ReactNode; pro
       </aside>
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3 lg:px-8">
+        {/* z-40 keeps the header — and the mobile drawer/overlay it renders — above
+            the fixed bottom nav (z-30) so the drawer fully covers it (logout stays
+            tappable). */}
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3 lg:px-8">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <MobileNav showAdmin={showAdmin} />
@@ -41,7 +44,9 @@ export async function AppShell({ children, profile }: { children: ReactNode; pro
             </div>
           </div>
         </header>
-        <main className="pb-20 lg:pb-0">{children}</main>
+        {/* Bottom padding clears the fixed bottom nav (≈69px) plus the device
+            safe-area inset so page content is never hidden behind it on mobile. */}
+        <main className="pb-[calc(5rem_+_env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
       </div>
       <BottomNav />
     </div>
