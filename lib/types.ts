@@ -94,6 +94,7 @@ export type FleetVehicle = {
   owner_name: string | null;
   owner_mobile: string | null;
   vendor_name: string | null;
+  vendor_mobile: string | null;
   gps_company: string | null;
   gps_device_id: string | null;
   home_circle_id: string;

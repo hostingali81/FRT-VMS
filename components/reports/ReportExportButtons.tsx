@@ -138,6 +138,7 @@ async function generateReport(
           .map((v) => ({
             "Registration No": v.registration_no,
             Vendor: v.vendor_name ?? "Unknown",
+            "Vendor Mobile": v.vendor_mobile ?? "",
             Circle: v.home_circle,
             Division: v.division ?? "",
             Status: v.status,

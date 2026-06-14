@@ -72,7 +72,8 @@ export default async function FuelDashboardPage({
 
   const rows = activeVehicles.map((v) => {
     const logs = logsByVehicle.get(v.vehicle_id) ?? [];
-    const totalLitres = logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0);
+    // Round the float sum — adding decimals (e.g. 5.5 + 8.69) leaves artifacts like 14.190000000000001.
+    const totalLitres = +logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0).toFixed(2);
     const totalAmount = logs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0);
     const gpsKm = gpsKmByVehicle.get(v.vehicle_id) ?? 0;
     // Average only when BOTH fuel and GPS distance exist — no fuel => no average (avoids confusion).
@@ -83,7 +84,7 @@ export default async function FuelDashboardPage({
   }).sort((a, b) => frtSortKey(a.vehicle.frt_no) - frtSortKey(b.vehicle.frt_no));
 
   const companyRows = rows.filter((r) => r.vehicle.fuel_ownership === "company");
-  const grandLitres = companyRows.reduce((sum, r) => sum + r.totalLitres, 0);
+  const grandLitres = +companyRows.reduce((sum, r) => sum + r.totalLitres, 0).toFixed(2);
   const grandAmount = companyRows.reduce((sum, r) => sum + r.totalAmount, 0);
   const grandKm = rows.reduce((sum, r) => sum + r.gpsKm, 0);
   // "Company distance" and the fleet average count every vehicle the company is

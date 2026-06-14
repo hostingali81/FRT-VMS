@@ -11,6 +11,7 @@ export const vehicleSchema = z.object({
   owner_name: z.string().optional().nullable(),
   owner_mobile: z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").optional().nullable().or(z.literal("")),
   vendor_name: z.string().optional().nullable(),
+  vendor_mobile: z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").optional().nullable().or(z.literal("")),
   gps_company: z.string().optional().nullable(),
   gps_device_id: z.string().optional().nullable(),
   circle_id: z.string().uuid("Invalid circle"),

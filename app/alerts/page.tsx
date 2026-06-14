@@ -112,7 +112,10 @@ export default async function AlertsPage({
                         {vehicle.registration_no}
                       </Link>
                       {vehicle.vendor_name && (
-                        <span className="text-sm font-medium text-slate-500">({vehicle.vendor_name})</span>
+                        <span className="text-sm font-medium text-slate-500">({vehicle.vendor_name}</span>
+                      )}
+                      {vehicle.vendor_mobile && (
+                        <span className="text-sm font-medium text-slate-500">{vehicle.vendor_mobile})</span>
                       )}
                     </div>
                     {(vehicle.current_circle || vehicle.division || vehicle.substation) && (

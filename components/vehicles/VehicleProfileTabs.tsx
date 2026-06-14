@@ -215,7 +215,12 @@ export function VehicleProfileTabs({
                       <span className="block text-xs text-slate-400">{vehicle.owner_mobile}</span>
                     )}
                   </Field>
-                  <Field label="Vendor">{vehicle.vendor_name ?? "—"}</Field>
+                  <Field label="Vendor">
+                    {vehicle.vendor_name ?? "—"}
+                    {vehicle.vendor_mobile && (
+                      <span className="block text-xs text-slate-400">{vehicle.vendor_mobile}</span>
+                    )}
+                  </Field>
                   <Field label="GPS Company">
                     {vehicle.gps_company ?? "—"}
                     {vehicle.gps_device_id && (

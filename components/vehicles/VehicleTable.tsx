@@ -230,6 +230,7 @@ export function VehicleTable({
                   Owner: vehicle.owner_name,
                   "Owner Mobile": vehicle.owner_mobile,
                   Vendor: vehicle.vendor_name,
+                  "Vendor Mobile": vehicle.vendor_mobile,
                   Circle: vehicle.current_circle,
                   Division: vehicle.division,
                   Substation: vehicle.substation,
@@ -288,6 +289,9 @@ export function VehicleTable({
                       {vehicle.registration_no}
                     </Link>
                     <span className="block text-xs text-slate-400">{vehicle.vendor_name ?? "—"}</span>
+                    {vehicle.vendor_mobile && (
+                      <span className="block text-xs text-slate-400">{vehicle.vendor_mobile}</span>
+                    )}
                   </td>
                   <td data-label="Type" className="px-3 py-3 sm:px-5 sm:py-4 text-slate-600">{vehicle.vehicle_type ?? "Not set"}</td>
                   <td data-label="Owner" className="px-3 py-3 sm:px-5 sm:py-4 text-slate-600">

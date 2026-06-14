@@ -87,6 +87,9 @@ export function VehicleForm({
           <Field label="Vendor">
             <Input name="vendor_name" defaultValue={vehicle?.vendor_name ?? ""} />
           </Field>
+          <Field label="Vendor Mobile">
+            <Input name="vendor_mobile" inputMode="tel" defaultValue={vehicle?.vendor_mobile ?? ""} />
+          </Field>
           <Field label="Status">
             <Select name="status" defaultValue={vehicle?.status ?? "active"} disabled={Boolean(vehicle)}>
               <option value="active">Active</option>

@@ -44,6 +44,17 @@ npx supabase db push
 
 The migrations create hierarchy tables, vehicle/driver masters, current assignments, append-only histories, document storage bucket, RLS helper policies, dashboard views, RPC transfer/status functions, and Barabanki seed data.
 
+## Vehicle Info & RTO Updates
+
+Update vehicle expiry dates (fitness, insurance, pollution certificate, etc.) from Cars24 RTO database:
+
+```bash
+npm run rto:refresh           # fetch & update Supabase
+npm run rto:refresh -- --dry  # preview changes without writing
+```
+
+(Runs locally due to Cloudflare blocking from Vercel IPs)
+
 ## Verification
 
 ```bash
