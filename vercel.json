@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/gps-distance",
-      "schedule": "*/5 * * * *"
+      "schedule": "28 18 * * *"
     }
   ]
 }
