@@ -10,6 +10,7 @@ type VehicleOption = {
   vehicle_id: string;
   registration_no: string;
   frt_no: string | null;
+  substation: string | null;
   gps_company: string | null;
 };
 
@@ -143,6 +144,7 @@ export function GpsDistanceCalculator({
                 <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
                   {vehicle.registration_no}
                   {vehicle.frt_no ? ` · ${vehicle.frt_no}` : ""}
+                  {vehicle.substation ? ` · ${vehicle.substation}` : ""}
                 </option>
               ))}
             </Select>

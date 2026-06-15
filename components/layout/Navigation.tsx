@@ -42,7 +42,7 @@ const bottomNavItems = [
   { href: "/fuel", label: "Fuel", icon: Droplets },
   { href: "/vehicles", label: "Vehicles", icon: CarFront },
   { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+  { href: "/gps-distance", label: "GPS", icon: Route },
 ];
 
 function isActive(pathname: string, href: string) {

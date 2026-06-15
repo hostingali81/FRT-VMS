@@ -2,13 +2,17 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatScope, requireProfile, ROLE_LABELS } from "@/lib/auth";
 import { BottomNav, LogoutButton, MobileNav, SidebarNav } from "@/components/layout/Navigation";
-import { getLookups } from "@/lib/data";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+import { getAlertsData, getLookups } from "@/lib/data";
 import { canOpenAdmin } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
 export async function AppShell({ children, profile }: { children: ReactNode; profile?: UserProfile }) {
   const activeProfile = profile ?? (await requireProfile());
-  const lookups = await getLookups(activeProfile);
+  // getAlertsData reuses the cached getVehicles/getDrivers, so the bell count is
+  // near-free on pages that already load the fleet.
+  const [lookups, alerts] = await Promise.all([getLookups(activeProfile), getAlertsData(activeProfile)]);
+  const alertCount = alerts.documentAlerts.length + alerts.driverLicenseAlerts.length;
   const showAdmin = canOpenAdmin(activeProfile);
 
   return (
@@ -42,6 +46,7 @@ export async function AppShell({ children, profile }: { children: ReactNode; pro
                 </p>
               </Link>
             </div>
+            <NotificationBell count={alertCount} />
           </div>
         </header>
         {/* Bottom padding clears the fixed bottom nav (≈69px) plus the device

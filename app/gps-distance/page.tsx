@@ -25,11 +25,19 @@ export default async function GpsDistancePage() {
         vehicle.gps_company &&
         GPS_PROVIDERS.includes(vehicle.gps_company),
     )
-    .sort((a, b) => a.registration_no.localeCompare(b.registration_no))
+    // Sort by FRT No (natural/numeric so FRT-2 comes before FRT-10); vehicles
+    // without an FRT No fall to the end, then ordered by registration.
+    .sort((a, b) => {
+      if (!a.frt_no && !b.frt_no) return a.registration_no.localeCompare(b.registration_no);
+      if (!a.frt_no) return 1;
+      if (!b.frt_no) return -1;
+      return a.frt_no.localeCompare(b.frt_no, undefined, { numeric: true, sensitivity: "base" });
+    })
     .map((vehicle) => ({
       vehicle_id: vehicle.vehicle_id,
       registration_no: vehicle.registration_no,
       frt_no: vehicle.frt_no,
+      substation: vehicle.substation,
       gps_company: vehicle.gps_company,
     }));
 
