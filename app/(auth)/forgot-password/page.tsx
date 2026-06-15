@@ -12,6 +12,46 @@ import { createBrowserSupabaseClient, isSupabaseBrowserConfigured } from "@/lib/
 
 type Step = "request" | "verify";
 
+// A reset spans two screens, and on mobile the user usually leaves to read the
+// emailed code — the browser often discards the page by the time they return.
+// Persist the pending request so they come back to the code step (with the email
+// remembered) instead of a blank form. Cleared once the password is changed, or
+// ignored after the OTP would have expired.
+const STORAGE_KEY = "frt-password-reset";
+const OTP_TTL_MS = 60 * 60 * 1000; // recovery OTP is valid ~1 hour
+const RESEND_COOLDOWN = 60;
+
+type PendingReset = { email: string; sentAt: number };
+
+function readPendingReset(): PendingReset | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingReset>;
+    if (!parsed.email || typeof parsed.sentAt !== "number") return null;
+    if (Date.now() - parsed.sentAt > OTP_TTL_MS) return null;
+    return { email: parsed.email, sentAt: parsed.sentAt };
+  } catch {
+    return null;
+  }
+}
+
+function writePendingReset(email: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ email, sentAt: Date.now() }));
+  } catch {
+    // storage unavailable (e.g. private mode) — the flow still works in-session
+  }
+}
+
+function clearPendingReset() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const configured = isSupabaseBrowserConfigured();
@@ -34,6 +74,18 @@ export default function ForgotPasswordPage() {
     const timer = setTimeout(() => setCooldown((value) => value - 1), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
+
+  // If a code was already sent before a reload / app switch, drop the user back
+  // on the code-entry step instead of the blank email form.
+  useEffect(() => {
+    const pending = readPendingReset();
+    if (!pending) return;
+    setEmail(pending.email);
+    setStep("verify");
+    const remaining = RESEND_COOLDOWN - Math.floor((Date.now() - pending.sentAt) / 1000);
+    if (remaining > 0) setCooldown(remaining);
+    setMessage(`Enter the 6-digit code sent to ${pending.email}.`);
+  }, []);
 
   function notify(text: string, error = false) {
     setMessage(text);
@@ -67,8 +119,9 @@ export default function ForgotPasswordPage() {
       return;
     }
 
+    writePendingReset(email.trim());
     setStep("verify");
-    setCooldown(60);
+    setCooldown(RESEND_COOLDOWN);
     notify(`A 6-digit reset code has been sent to ${email.trim()}. Enter it below.`);
   }
 
@@ -110,6 +163,7 @@ export default function ForgotPasswordPage() {
 
     // verifyOtp already established a session, so the user lands signed in.
     // "/" applies the role-based landing page.
+    clearPendingReset();
     router.push("/");
   }
 
@@ -125,7 +179,8 @@ export default function ForgotPasswordPage() {
     setIsLoading(false);
 
     if (result.status === "sent") {
-      setCooldown(60);
+      writePendingReset(email.trim());
+      setCooldown(RESEND_COOLDOWN);
       notify("A new code has been sent.");
       return;
     }
@@ -134,6 +189,17 @@ export default function ForgotPasswordPage() {
       return;
     }
     notify("Could not resend the code. Please try again.", true);
+  }
+
+  // Bail out of an in-progress reset and go back to the email step.
+  function startOver() {
+    clearPendingReset();
+    setStep("request");
+    setCode("");
+    setPassword("");
+    setConfirm("");
+    setCooldown(0);
+    notify("");
   }
 
   return (
@@ -234,6 +300,14 @@ export default function ForgotPasswordPage() {
                 className="w-full text-center text-sm text-slate-500 underline-offset-2 hover:underline disabled:no-underline disabled:opacity-50"
               >
                 {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
+              </button>
+              <button
+                type="button"
+                onClick={startOver}
+                disabled={isLoading}
+                className="w-full text-center text-sm text-slate-500 underline-offset-2 hover:underline disabled:opacity-50"
+              >
+                Use a different email
               </button>
             </form>
           )}
