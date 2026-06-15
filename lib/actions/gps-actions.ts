@@ -7,6 +7,7 @@ import { getAllLookups, getVehicles } from "@/lib/data";
 import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { isMillitrackConfigured, millitrackSummary } from "@/lib/millitrack";
+import { isWheelsEyeConfigured, wheelsEyeDistanceByReg } from "@/lib/wheelseye";
 import { syncMonthlyGpsDistance } from "@/lib/gps-distance";
 
 /**
@@ -151,4 +152,70 @@ export async function syncGpsMonthlyDistanceAction() {
     `/fuel?msync=ok&vehicles=${result.vehicles}&months=${result.months}&failed=${result.failed}` +
       `&from=${encodeURIComponent(result.from ?? "")}&to=${encodeURIComponent(result.to ?? "")}`,
   );
+}
+
+const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+export type GpsDistanceResult =
+  | { ok: true; km: number; registration: string }
+  | { ok: false; error: string };
+
+/**
+ * On-demand GPS distance for one vehicle over an arbitrary date-time window.
+ * Powers the /gps-distance calculator. Provider-aware (Millitrack/VehicleStep
+ * by device id, WheelsEye by registration). Permission-scoped: the vehicle must
+ * be one the caller can already see (getVehicles is permission-filtered), so a
+ * circle/division user can't pull another location's data.
+ *
+ * Caller passes ISO timestamps computed in the browser (device timezone), so the
+ * window is absolute and independent of the server's UTC clock.
+ */
+export async function getVehicleGpsDistanceAction(input: {
+  vehicleId: string;
+  fromISO: string;
+  toISO: string;
+}): Promise<GpsDistanceResult> {
+  const profile = await requireProfile();
+
+  const vehicleId = typeof input?.vehicleId === "string" ? input.vehicleId : "";
+  const fromISO = typeof input?.fromISO === "string" ? input.fromISO : "";
+  const toISO = typeof input?.toISO === "string" ? input.toISO : "";
+  if (!vehicleId || !fromISO || !toISO) return { ok: false, error: "Vehicle aur dono date-time chuno." };
+
+  const fromMs = Date.parse(fromISO);
+  const toMs = Date.parse(toISO);
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return { ok: false, error: "Date-time sahi nahi hai." };
+  if (fromMs >= toMs) return { ok: false, error: "Start date-time, end se pehle hona chahiye." };
+
+  // getVehicles is already permission-filtered, so finding the vehicle here is
+  // both the lookup and the access check.
+  const vehicles = await getVehicles(profile);
+  const vehicle = vehicles.find((v) => v.vehicle_id === vehicleId);
+  if (!vehicle) return { ok: false, error: "Ye vehicle nahi mila ya aapko iska access nahi hai." };
+
+  try {
+    if (vehicle.gps_company === "VehicleStep") {
+      const deviceId = String(vehicle.gps_device_id ?? "").trim();
+      if (!/^\d+$/.test(deviceId)) return { ok: false, error: "Is vehicle pe valid GPS device mapped nahi hai." };
+      if (!isMillitrackConfigured()) return { ok: false, error: "GPS provider (VehicleStep) abhi configured nahi hai." };
+
+      const rows = await millitrackSummary(deviceId, fromISO, toISO);
+      const km = rows.reduce((sum, r) => sum + (r.distance ?? 0) / 1000, 0);
+      return { ok: true, km: +km.toFixed(2), registration: vehicle.registration_no };
+    }
+
+    if (vehicle.gps_company === "WheelsEye") {
+      if (!isWheelsEyeConfigured()) return { ok: false, error: "GPS provider (WheelsEye) abhi configured nahi hai." };
+
+      const kmByReg = await wheelsEyeDistanceByReg(Math.floor(fromMs / 1000), Math.floor(toMs / 1000));
+      const km = kmByReg.get(normReg(vehicle.registration_no));
+      if (km == null) return { ok: false, error: "Is range me is vehicle ka GPS data nahi mila." };
+      return { ok: true, km: +km.toFixed(2), registration: vehicle.registration_no };
+    }
+
+    return { ok: false, error: "Is vehicle pe GPS device nahi laga hai." };
+  } catch (e) {
+    console.error("[gps-distance]", e instanceof Error ? e.message : e);
+    return { ok: false, error: "GPS data laane me dikkat aayi. Thodi der baad dobara try karo." };
+  }
 }
