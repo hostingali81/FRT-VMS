@@ -130,19 +130,27 @@ export function VehicleProfileTabs({
 
   return (
     <div>
-      {/* Mobile tab selector */}
-      <div className="border-b border-slate-200 bg-white px-4 md:hidden">
-        <Select
-          value={tab}
-          onChange={(e) => setTab(e.target.value as TabName)}
-          className="my-3"
-        >
+      {/* Mobile tab selector — wrapped pills so every tab is visible and one-tap
+          (a dropdown hid the options and took two taps to switch). */}
+      <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+        <div className="flex flex-wrap gap-2">
           {TABS.map((t) => (
-            <option key={t} value={t}>
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              aria-pressed={t === tab}
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                t === tab
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-600 active:bg-slate-100",
+              )}
+            >
               {t}
-            </option>
+            </button>
           ))}
-        </Select>
+        </div>
       </div>
 
       {/* Desktop tab bar */}
