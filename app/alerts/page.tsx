@@ -111,11 +111,10 @@ export default async function AlertsPage({
                       <Link href={`/vehicles/${vehicle.vehicle_id}`} className="font-semibold text-slate-950 hover:underline">
                         {vehicle.registration_no}
                       </Link>
-                      {vehicle.vendor_name && (
-                        <span className="text-sm font-medium text-slate-500">({vehicle.vendor_name}</span>
-                      )}
-                      {vehicle.vendor_mobile && (
-                        <span className="text-sm font-medium text-slate-500">{vehicle.vendor_mobile})</span>
+                      {(vehicle.vendor_name || vehicle.vendor_mobile) && (
+                        <span className="text-sm font-medium text-slate-500">
+                          ({[vehicle.vendor_name, vehicle.vendor_mobile].filter(Boolean).join(" ")})
+                        </span>
                       )}
                     </div>
                     {(vehicle.current_circle || vehicle.division || vehicle.substation) && (
