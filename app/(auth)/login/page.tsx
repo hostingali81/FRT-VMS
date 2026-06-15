@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,6 +65,11 @@ export default function LoginPage() {
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               Sign In
             </Button>
+            <div className="text-center text-sm">
+              <Link href="/forgot-password" className="text-slate-500 underline-offset-2 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

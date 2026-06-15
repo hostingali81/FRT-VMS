@@ -248,6 +248,12 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Password reset (forgot-password) email. The template renders the OTP code via
+# {{ .Token }} so users get a 6-digit code instead of a magic link.
+[auth.email.template.recovery]
+subject = "Reset your FRT-VMS password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
