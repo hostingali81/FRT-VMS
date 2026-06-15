@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, Gauge, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
@@ -61,6 +61,7 @@ export function GpsDistanceCalculator({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   // Default to "today, so far". Set on the client to avoid an SSR hydration
   // mismatch (the server has no local clock for the device).
@@ -71,6 +72,14 @@ export function GpsDistanceCalculator({
     setFrom(toLocalInput(startOfDay));
     setTo(toLocalInput(now));
   }, []);
+
+  // On mobile the result lands below the fold, so bring it into view as soon
+  // as it appears.
+  useEffect(() => {
+    if (result) {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [result]);
 
   async function handleCalculate() {
     setError("");
@@ -193,18 +202,20 @@ export function GpsDistanceCalculator({
       </Card>
 
       {result ? (
-        <Card>
-          <CardContent className="py-6 text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Distance travelled</p>
-            <p className="mt-2 text-4xl font-bold text-slate-950">
-              {result.km.toLocaleString("en-IN")} <span className="text-2xl font-semibold text-slate-500">km</span>
-            </p>
-            <p className="mt-3 text-sm font-medium text-slate-700">{result.registration}</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {result.fromLabel} — {result.toLabel}
-            </p>
-          </CardContent>
-        </Card>
+        <div ref={resultRef} className="scroll-mt-4">
+          <Card>
+            <CardContent className="py-6 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Distance travelled</p>
+              <p className="mt-2 text-4xl font-bold text-slate-950">
+                {result.km.toLocaleString("en-IN")} <span className="text-2xl font-semibold text-slate-500">km</span>
+              </p>
+              <p className="mt-3 text-sm font-medium text-slate-700">{result.registration}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {result.fromLabel} — {result.toLabel}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
     </div>
   );
