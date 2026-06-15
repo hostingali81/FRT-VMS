@@ -15,6 +15,56 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+// Walks the auth user list (admin only) to confirm an email belongs to a real
+// account. Returns null on a lookup failure so callers can distinguish "no
+// account" from "couldn't check". listUsers is paginated; we stop as soon as we
+// match or run out of pages.
+async function emailHasAccount(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  email: string,
+): Promise<boolean | null> {
+  const target = email.toLowerCase();
+  const perPage = 200;
+
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) return null;
+
+    const users = data?.users ?? [];
+    if (users.some((user) => (user.email ?? "").toLowerCase() === target)) return true;
+    if (users.length < perPage) return false;
+  }
+
+  return false;
+}
+
+type PasswordResetStatus = "sent" | "not-found" | "invalid" | "error";
+
+// Public (no auth) — called from the forgot-password page. Unlike a bare
+// resetPasswordForEmail, this first verifies the email maps to an account so the
+// UI can tell the user when they've mistyped it, then sends the OTP code.
+export async function requestPasswordResetAction(
+  email: string,
+): Promise<{ status: PasswordResetStatus }> {
+  const trimmed = typeof email === "string" ? email.trim() : "";
+  if (!trimmed) return { status: "invalid" };
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) return { status: "error" };
+
+  const exists = await emailHasAccount(admin, trimmed);
+  if (exists === null) return { status: "error" };
+  if (!exists) return { status: "not-found" };
+
+  // resetPasswordForEmail doesn't create a session, so the anon server client is
+  // safe to use here — it just triggers the recovery email send.
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(trimmed);
+  if (error) return { status: "error" };
+
+  return { status: "sent" };
+}
+
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") return null;

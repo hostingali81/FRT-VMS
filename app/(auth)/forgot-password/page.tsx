@@ -1,12 +1,13 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/form";
+import { requestPasswordResetAction } from "@/lib/actions/auth-actions";
 import { createBrowserSupabaseClient, isSupabaseBrowserConfigured } from "@/lib/supabase/client";
 
 type Step = "request" | "verify";
@@ -24,15 +25,23 @@ export default function ForgotPasswordPage() {
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // Seconds left before "Resend code" is allowed again. Set to 60 each time a
+  // code is sent so the user can't spam the email endpoint.
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((value) => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   function notify(text: string, error = false) {
     setMessage(text);
     setIsError(error);
   }
 
-  // Step 1 — email a recovery OTP code. resetPasswordForEmail never reveals
-  // whether the address exists, so we always advance to the code step and show
-  // a neutral message (no account enumeration).
+  // Step 1 — email a recovery OTP code. The server action first checks the email
+  // belongs to a real account, so we can tell the user when it doesn't.
   async function handleRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     notify("");
@@ -42,17 +51,25 @@ export default function ForgotPasswordPage() {
     }
 
     setIsLoading(true);
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const result = await requestPasswordResetAction(email);
     setIsLoading(false);
 
-    if (error) {
-      notify(error.message, true);
+    if (result.status === "not-found") {
+      notify("No account is registered with this email address. Please check the email and try again.", true);
+      return;
+    }
+    if (result.status === "invalid") {
+      notify("Please enter your email address.", true);
+      return;
+    }
+    if (result.status !== "sent") {
+      notify("Something went wrong while sending the code. Please try again.", true);
       return;
     }
 
     setStep("verify");
-    notify("If an account exists for that email, a 6-digit reset code is on its way. Enter it below.");
+    setCooldown(60);
+    notify(`A 6-digit reset code has been sent to ${email.trim()}. Enter it below.`);
   }
 
   // Step 2 — verify the OTP (which signs the user in under a recovery session)
@@ -98,15 +115,25 @@ export default function ForgotPasswordPage() {
 
   async function handleResend() {
     notify("");
+    if (cooldown > 0 || isLoading) return;
     if (!configured) {
       notify("Supabase env keys are not configured yet.", true);
       return;
     }
     setIsLoading(true);
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const result = await requestPasswordResetAction(email);
     setIsLoading(false);
-    notify(error ? error.message : "A new code has been sent.", Boolean(error));
+
+    if (result.status === "sent") {
+      setCooldown(60);
+      notify("A new code has been sent.");
+      return;
+    }
+    if (result.status === "not-found") {
+      notify("No account is registered with this email address.", true);
+      return;
+    }
+    notify("Could not resend the code. Please try again.", true);
   }
 
   return (
@@ -203,10 +230,10 @@ export default function ForgotPasswordPage() {
               <button
                 type="button"
                 onClick={handleResend}
-                disabled={isLoading}
-                className="w-full text-center text-sm text-slate-500 underline-offset-2 hover:underline disabled:opacity-50"
+                disabled={isLoading || cooldown > 0}
+                className="w-full text-center text-sm text-slate-500 underline-offset-2 hover:underline disabled:no-underline disabled:opacity-50"
               >
-                Resend code
+                {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
               </button>
             </form>
           )}
