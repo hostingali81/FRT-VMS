@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Send } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -9,6 +9,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import type { FleetVehicle, LookupData } from "@/lib/types";
 import { formatDate } from "@/lib/utils/format";
+
+// Reason values are stored as-is in transfer history, so keep them stable.
+// `hint` is only shown in the dropdown to make each reason self-explanatory.
+// Reasons describe WHY the vehicle moved, not its condition — the vehicle's
+// working state ("breakdown", "accident", etc.) lives in Status, not here.
+// Same-circle moves are operational (any reason); cross-circle moves are
+// administrative redeployments that need approval, so the list is narrower.
+// "Cross-circle" is never a manual reason — the form detects it automatically.
+const SAME_CIRCLE_REASONS = [
+  { value: "Interchange", hint: "swap two vehicles" },
+  { value: "Redeployment", hint: "moved where needed" },
+  { value: "Administrative", hint: "management decision" },
+];
+
+const CROSS_CIRCLE_REASONS = [
+  { value: "Redeployment", hint: "moved where needed" },
+  { value: "Administrative", hint: "management decision" },
+];
 
 export function TransferForm({
   vehicle,
@@ -35,6 +53,17 @@ export function TransferForm({
   );
 
   const isCrossCircle = Boolean(vehicle.current_circle_id && circleId && vehicle.current_circle_id !== circleId);
+
+  const reasonOptions = isCrossCircle ? CROSS_CIRCLE_REASONS : SAME_CIRCLE_REASONS;
+  const [reason, setReason] = useState(SAME_CIRCLE_REASONS[0].value);
+
+  // When the transfer type flips (same- vs cross-circle), the current reason
+  // may no longer be offered — fall back to the first valid option.
+  useEffect(() => {
+    if (!reasonOptions.some((option) => option.value === reason)) {
+      setReason(reasonOptions[0].value);
+    }
+  }, [reasonOptions, reason]);
 
   return (
     <form action={action} className="grid gap-4 lg:grid-cols-[22rem_1fr]">
@@ -69,12 +98,12 @@ export function TransferForm({
             <Input name="transfer_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
           </Field>
           <Field label="Reason">
-            <Select name="reason" defaultValue="Interchange">
-              <option>Interchange</option>
-              <option>Redeployment</option>
-              <option>Breakdown</option>
-              <option>Administrative</option>
-              <option>Cross-Circle</option>
+            <Select name="reason" value={reason} onChange={(event) => setReason(event.target.value)}>
+              {reasonOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value} — {option.hint}
+                </option>
+              ))}
             </Select>
           </Field>
           <Field label="To Circle">
