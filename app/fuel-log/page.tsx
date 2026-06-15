@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ClipboardList, Fuel } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
@@ -68,7 +67,7 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[840px] divide-y divide-slate-200 text-sm">
+              <table className="w-full min-w-[680px] divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-5 py-3">Date</th>
@@ -77,8 +76,6 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
                     <th className="px-5 py-3">Type</th>
                     <th className="px-5 py-3 text-right">Litres</th>
                     <th className="px-5 py-3 text-right">Amount</th>
-                    <th className="px-5 py-3 text-right">KM (GPS)</th>
-                    <th className="px-5 py-3 text-right">Avg km/L</th>
                     <th className="px-5 py-3">Notes</th>
                     <th className="px-5 py-3">By</th>
                   </tr>
@@ -86,10 +83,6 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
                 <tbody className="divide-y divide-slate-100">
                   {entries.map((log) => {
                     const vehicle = vehicleById.get(log.vehicle_id);
-                    const avg =
-                      log.gps_distance_km !== null && log.fuel_litres > 0
-                        ? +(log.gps_distance_km / log.fuel_litres).toFixed(1)
-                        : null;
                     return (
                       <tr key={log.id} className="hover:bg-slate-50">
                         <td className="px-5 py-3.5 font-medium text-slate-900">{formatDate(log.log_date)}</td>
@@ -119,16 +112,6 @@ export default async function FuelLogPage({ searchParams }: { searchParams: { m?
                         <td className="px-5 py-3.5 text-right font-medium text-slate-900">{log.fuel_litres} L</td>
                         <td className="px-5 py-3.5 text-right text-slate-700">
                           {log.fuel_amount != null ? `₹${log.fuel_amount.toLocaleString("en-IN")}` : "—"}
-                        </td>
-                        <td className="px-5 py-3.5 text-right text-slate-600">
-                          {log.gps_distance_km != null ? (
-                            `${log.gps_distance_km.toLocaleString("en-IN")} km`
-                          ) : (
-                            <span className="text-xs text-slate-400">{log.gps_synced_at ? "no GPS" : "not synced"}</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          {avg !== null ? <Badge tone="blue">{avg}</Badge> : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-5 py-3.5 text-slate-500">{log.notes ?? "—"}</td>
                         <td className="px-5 py-3.5 text-slate-500">{log.recorded_by ?? "—"}</td>
