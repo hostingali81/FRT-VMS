@@ -93,17 +93,31 @@ export default async function VehicleProfilePage({
         backHref="/vehicles"
         badge={<StatusBadge status={vehicle.status} />}
       >
-        {canManageVehicle ? (
-          <LinkButton href={`/vehicles/${vehicle.vehicle_id}/edit`} variant="outline">
-            <Edit3 className="h-4 w-4" aria-hidden="true" />
-            Update Vehicle
-          </LinkButton>
-        ) : null}
-        {canTransfer ? (
-          <LinkButton href={`/vehicles/${vehicle.vehicle_id}/transfer`}>
-            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            Change Location
-          </LinkButton>
+        {/* Both actions share one row so they don't stack into two tall full-width
+            buttons on mobile. flex-1 → equal halves when both show, full width when
+            only one. Smaller text on mobile keeps "Change Location" on one line. */}
+        {canManageVehicle || canTransfer ? (
+          <div className="flex w-full gap-2 sm:w-auto">
+            {canManageVehicle ? (
+              <LinkButton
+                href={`/vehicles/${vehicle.vehicle_id}/edit`}
+                variant="outline"
+                className="flex-1 justify-center whitespace-nowrap px-3 text-xs sm:flex-none sm:px-4 sm:text-sm"
+              >
+                <Edit3 className="h-4 w-4" aria-hidden="true" />
+                Update Vehicle
+              </LinkButton>
+            ) : null}
+            {canTransfer ? (
+              <LinkButton
+                href={`/vehicles/${vehicle.vehicle_id}/transfer`}
+                className="flex-1 justify-center whitespace-nowrap px-3 text-xs sm:flex-none sm:px-4 sm:text-sm"
+              >
+                <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+                Change Location
+              </LinkButton>
+            ) : null}
+          </div>
         ) : null}
       </PageHeader>
       <VehicleProfileTabs
