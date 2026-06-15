@@ -1,25 +1,43 @@
 import { z } from "zod";
 
+// HTML form fields always submit a value — a blank input arrives as "" (never
+// undefined). Writing "" to a date/integer column throws ("invalid input syntax
+// for type date"), and for text columns it stores an empty string instead of NULL.
+// These helpers normalise blank → null so optional columns stay clean and the
+// create/update/driver actions can spread the parsed object straight into the DB.
+//   - "" or whitespace-only  → null
+//   - absent (undefined)     → undefined (so .partial() updates omit the column)
+const emptyToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
+
+const optionalText = z.preprocess(emptyToNull, z.string().trim().nullable()).optional();
+const optionalMobile = z
+  .preprocess(emptyToNull, z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").nullable())
+  .optional();
+const optionalDate = z.preprocess(emptyToNull, z.string().nullable()).optional();
+const optionalYear = z
+  .preprocess(emptyToNull, z.coerce.number().int().min(1990, "Year must be 1990 or later").max(2035, "Year is too far in the future").nullable())
+  .optional();
+
 export const vehicleSchema = z.object({
   registration_no: z.string().min(4, "Registration number is too short").max(15).toUpperCase(),
-  frt_no: z.string().optional().nullable(),
+  frt_no: optionalText,
   vehicle_type: z.string().min(1, "Vehicle type is required"),
   fuel_type: z.enum(["Diesel", "Petrol", "CNG", "EV"]),
   fuel_ownership: z.enum(["company", "vendor"]).default("company"),
   driver_ownership: z.enum(["company", "vendor"]).default("company"),
-  model_year: z.coerce.number().min(1990).max(2035).optional().nullable(),
-  owner_name: z.string().optional().nullable(),
-  owner_mobile: z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").optional().nullable().or(z.literal("")),
-  vendor_name: z.string().optional().nullable(),
-  vendor_mobile: z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").optional().nullable().or(z.literal("")),
-  gps_company: z.string().optional().nullable(),
-  gps_device_id: z.string().optional().nullable(),
+  model_year: optionalYear,
+  owner_name: optionalText,
+  owner_mobile: optionalMobile,
+  vendor_name: optionalText,
+  vendor_mobile: optionalMobile,
+  gps_company: optionalText,
+  gps_device_id: optionalText,
   circle_id: z.string().uuid("Invalid circle"),
-  insurance_expiry: z.string().optional().nullable().or(z.literal("")),
-  fitness_expiry: z.string().optional().nullable().or(z.literal("")),
-  pollution_expiry: z.string().optional().nullable().or(z.literal("")),
+  insurance_expiry: optionalDate,
+  fitness_expiry: optionalDate,
+  pollution_expiry: optionalDate,
   status: z.enum(['active', 'maintenance', 'breakdown', 'removed', 'standby', 'accident']).default('active'),
-  notes: z.string().optional().nullable(),
+  notes: optionalText,
 });
 
 export const transferSchema = z.object({
@@ -42,10 +60,10 @@ export const statusSchema = z.object({
 
 export const driverSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  mobile: z.string().regex(/^[0-9]{10}$/, "Mobile must be 10 digits").optional().nullable().or(z.literal("")),
-  license_no: z.string().optional().nullable(),
-  license_expiry: z.string().optional().nullable().or(z.literal("")),
-  address: z.string().optional().nullable(),
+  mobile: optionalMobile,
+  license_no: optionalText,
+  license_expiry: optionalDate,
+  address: optionalText,
   circle_id: z.string().uuid("Invalid circle"),
   status: z.enum(['active', 'inactive']).default('active'),
 });
