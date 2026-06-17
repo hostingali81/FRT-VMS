@@ -37,7 +37,7 @@ const TABS = [
   "GPS Distance",
   "Transfers",
   "Status History",
-  "Fuel History",
+  "Fuel Source Logs",
   "Driver History",
   "Driver Source",
   "Documents",
@@ -121,8 +121,9 @@ export function VehicleProfileTabs({
     const monthLogs = fuelLogs.filter((l) => l.log_date.startsWith(monthStr));
     return {
       entries: monthLogs.length,
-      litres: monthLogs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0),
-      amount: monthLogs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0),
+      // Round the float sum — e.g. 14.27 + 8.7 leaves artifacts like 22.969999999999995.
+      litres: +monthLogs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0).toFixed(2),
+      amount: +monthLogs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0).toFixed(2),
     };
   }, [fuelLogs]);
 
@@ -739,8 +740,8 @@ export function VehicleProfileTabs({
           </Card>
         )}
 
-        {/* ─── FUEL HISTORY (ownership changes) ─── */}
-        {tab === "Fuel History" && (
+        {/* ─── FUEL SOURCE LOGS (ownership changes) ─── */}
+        {tab === "Fuel Source Logs" && (
           <Card>
             <CardContent className="pt-6">
               {fuelOwnershipHistory.length === 0 ? (

@@ -39,7 +39,7 @@ const VALID_TABS = [
   "GPS Distance",
   "Transfers",
   "Status History",
-  "Fuel History",
+  "Fuel Source Logs",
   "Driver History",
   "Driver Source",
   "Documents",
