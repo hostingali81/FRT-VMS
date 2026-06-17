@@ -412,6 +412,32 @@ export async function getFuelLogs(vehicleId: string, profile?: UserProfile | nul
   return (data ?? []) as FuelLogEntry[];
 }
 
+const fetchAllFuelLogs = cache(async (): Promise<FuelLogEntry[]> => {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return mockFuelLogs;
+
+  const { data, error } = await supabase
+    .from("vehicle_fuel_logs")
+    .select("*")
+    .order("log_date", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getAllFuelLogs failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as FuelLogEntry[];
+});
+
+/** Every fuel log the caller can see — used for all-time mileage on the dashboard. */
+export async function getAllFuelLogs(profile?: UserProfile | null): Promise<FuelLogEntry[]> {
+  const allLogs = await fetchAllFuelLogs();
+  if (!profile) return allLogs;
+
+  const vehicles = await getVehicles(profile);
+  const ids = new Set(vehicles.map((v) => v.vehicle_id));
+  return allLogs.filter((l) => ids.has(l.vehicle_id));
+}
+
 const fetchFuelLogsForMonth = cache(async (month: string): Promise<FuelLogEntry[]> => {
   const from = `${month}-01`;
   // Last day of month: go to first of next month minus 1

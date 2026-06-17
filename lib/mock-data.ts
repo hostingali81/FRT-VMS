@@ -542,7 +542,8 @@ export const mockStatusHistory: StatusHistoryItem[] = [
 ];
 
 export const mockFuelLogs: FuelLogEntry[] = [
-  // up32-ab-1245: two fills. First (oldest) has no prior fill → no GPS segment.
+  // up32-ab-1245: a 4-fill chain. First (oldest) has no prior fill → no GPS segment.
+  // All-time: (360+400+300) km ÷ (35+38+40) L = 1060/113 ≈ 9.4 km/L (last fill excluded).
   {
     id: "fuel-log-2",
     vehicle_id: "vehicle-up32-ab-1245",
@@ -557,17 +558,43 @@ export const mockFuelLogs: FuelLogEntry[] = [
     created_at: iso(-18),
   },
   {
+    id: "fuel-log-6",
+    vehicle_id: "vehicle-up32-ab-1245",
+    log_date: iso(-12),
+    fuel_type: "Diesel",
+    fuel_litres: 38,
+    fuel_amount: 3420,
+    gps_distance_km: 360, // 360 km since the -18 fill
+    gps_synced_at: iso(-1),
+    recorded_by: "Circle Incharge",
+    notes: null,
+    created_at: iso(-12),
+  },
+  {
     id: "fuel-log-1",
     vehicle_id: "vehicle-up32-ab-1245",
     log_date: iso(-3),
     fuel_type: "Diesel",
     fuel_litres: 40,
     fuel_amount: 3600,
-    gps_distance_km: 400, // 400 km / 40 L = 10 km/L
+    gps_distance_km: 400, // 400 km since the -12 fill
     gps_synced_at: iso(-1),
     recorded_by: "Circle Incharge",
     notes: null,
     created_at: iso(-3),
+  },
+  {
+    id: "fuel-log-7",
+    vehicle_id: "vehicle-up32-ab-1245",
+    log_date: iso(-1),
+    fuel_type: "Diesel",
+    fuel_litres: 30,
+    fuel_amount: 2700,
+    gps_distance_km: 300, // 300 km since the -3 fill (latest fill → excluded from fuel)
+    gps_synced_at: iso(-1),
+    recorded_by: "Circle Incharge",
+    notes: null,
+    created_at: iso(-1),
   },
   // up32-cd-8831: single fill → no segment yet
   {

@@ -152,3 +152,152 @@ export async function syncMonthlyGpsDistance(
     to: nowISO,
   };
 }
+
+// ── Per-fill segment distance ───────────────────────────────────────────────
+// gps_distance_km on each fuel log = GPS distance from the PREVIOUS fill to that
+// fill. Monthly and all-time mileage are both built from these segments, so this
+// is what makes the average possible. Distinct from the monthly distance above.
+
+export type SegmentSyncResult = {
+  ok: boolean;
+  reason?: string;
+  vehicles: number; // vehicles that had at least one segment written
+  segments: number; // segments written this run
+  failed: number;
+};
+
+/**
+ * Tile [fromMs, toMs] into contiguous windows that each fall within a single IST
+ * calendar month (so each is ≤31 days, under the provider's ~1-month max-period
+ * cap), and whose distances sum to the whole-range total. Mirrors the tiling used
+ * by the on-demand GPS distance calculator.
+ */
+function istMonthWindows(fromMs: number, toMs: number): { fromMs: number; toMs: number }[] {
+  const windows: { fromMs: number; toMs: number }[] = [];
+  let cursor = fromMs;
+  while (cursor < toMs) {
+    const ist = new Date(cursor + IST_OFFSET_MS);
+    const nextMonthStartMs = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() + 1, 1) - IST_OFFSET_MS;
+    const end = Math.min(nextMonthStartMs, toMs);
+    windows.push({ fromMs: cursor, toMs: end });
+    cursor = end;
+  }
+  return windows;
+}
+
+type SegmentVehicle = {
+  id: string;
+  registration_no: string;
+  gps_device_id: string | number | null;
+  gps_company: string | null;
+};
+
+/** Distance (km) for one segment window, picking the provider from gps_company. */
+async function segmentDistanceKm(
+  vehicle: SegmentVehicle,
+  fromMs: number,
+  toMs: number,
+  mtReady: boolean,
+  weReady: boolean,
+): Promise<number> {
+  const windows = istMonthWindows(fromMs, toMs);
+
+  if (vehicle.gps_company === "WheelsEye") {
+    if (!weReady) throw new Error("WheelsEye not configured");
+    let km = 0;
+    for (const w of windows) {
+      const byReg = await wheelsEyeDistanceByReg(Math.floor(w.fromMs / 1000), Math.floor(w.toMs / 1000));
+      km += byReg.get(normReg(vehicle.registration_no)) ?? 0;
+    }
+    return km;
+  }
+
+  // Default: Millitrack / VehicleStep, keyed by numeric device id.
+  const deviceId = String(vehicle.gps_device_id ?? "").trim();
+  if (!/^\d+$/.test(deviceId)) throw new Error("invalid GPS device id");
+  if (!mtReady) throw new Error("Millitrack not configured");
+  let km = 0;
+  for (const w of windows) {
+    const rows = await millitrackSummary(deviceId, new Date(w.fromMs).toISOString(), new Date(w.toMs).toISOString());
+    km += rows.reduce((sum, r) => sum + (r.distance ?? 0) / 1000, 0);
+  }
+  return km;
+}
+
+/**
+ * Fill in gps_distance_km for every fuel-log segment that doesn't have one yet, for
+ * company-fuelled GPS-mapped vehicles. One provider call per open segment (tiled if
+ * the gap exceeds a month).
+ *
+ * Already-synced segments are skipped — a closed segment's distance never changes.
+ * (Known limitation: inserting a back-dated fill or deleting a middle fill can leave
+ * the next segment stale; that needs a manual full re-sync. Tracked as a follow-up.)
+ *
+ * `allowedVehicleIds` scopes the sync the same way the monthly sync does.
+ */
+export async function syncFuelSegmentDistances(
+  allowedVehicleIds?: Set<string> | null,
+): Promise<SegmentSyncResult> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return { ok: false, reason: "Database connection not available", vehicles: 0, segments: 0, failed: 0 };
+
+  const { data: vehicles, error } = await supabase
+    .from("vehicles")
+    .select("id,registration_no,gps_device_id,gps_company,fuel_ownership")
+    .eq("fuel_ownership", "company")
+    .not("gps_device_id", "is", null);
+  if (error) return { ok: false, reason: error.message, vehicles: 0, segments: 0, failed: 0 };
+
+  const candidates = (vehicles ?? []).filter((v) => !allowedVehicleIds || allowedVehicleIds.has(v.id));
+
+  const mtReady = isMillitrackConfigured();
+  const weReady = isWheelsEyeConfigured();
+  const nowISO = new Date().toISOString();
+
+  let vehiclesSynced = 0;
+  let segments = 0;
+  let failed = 0;
+
+  for (const vehicle of candidates) {
+    try {
+      const { data: logs } = await supabase
+        .from("vehicle_fuel_logs")
+        .select("id,log_date,created_at,gps_distance_km")
+        .eq("vehicle_id", vehicle.id)
+        .order("log_date", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (!logs || logs.length < 2) continue; // need two fills for a segment
+
+      let touched = false;
+      for (let i = 1; i < logs.length; i++) {
+        if (logs[i].gps_distance_km != null) continue; // closed segment — skip
+
+        const prevDate = logs[i - 1].log_date as string;
+        const currDate = logs[i].log_date as string;
+        const fromMs = Date.parse(`${prevDate}T00:00:00.000Z`);
+        const toMs = Date.parse(`${currDate}T00:00:00.000Z`);
+
+        // Two fills on the same date have no measurable gap. Record 0 (not null) so
+        // the segment is "closed" and the mileage maths can still proceed.
+        const segKm = toMs > fromMs ? await segmentDistanceKm(vehicle, fromMs, toMs, mtReady, weReady) : 0;
+
+        const { error: upErr } = await supabase
+          .from("vehicle_fuel_logs")
+          .update({ gps_distance_km: +segKm.toFixed(2), gps_synced_at: nowISO })
+          .eq("id", logs[i].id);
+        if (upErr) throw new Error(upErr.message);
+
+        segments += 1;
+        touched = true;
+      }
+
+      if (touched) vehiclesSynced += 1;
+    } catch (e) {
+      console.error(`[gps-segment] ${vehicle.registration_no}:`, e instanceof Error ? e.message : e);
+      failed += 1;
+    }
+  }
+
+  return { ok: true, vehicles: vehiclesSynced, segments, failed };
+}

@@ -10,7 +10,9 @@ import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Timeline } from "@/components/shared/Timeline";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/ui/tooltip";
 import { QuickFuelForm } from "@/components/fuel/QuickFuelForm";
+import { computeMileage, mileageForMonth, type MileageBreakdown } from "@/lib/mileage";
 import type {
   DriverAssignment,
   DriverOwnershipHistoryItem,
@@ -105,6 +107,13 @@ export function VehicleProfileTabs({
 
   const hasGpsDevice = Boolean(vehicle.gps_device_id);
   const anySynced = useMemo(() => fuelLogs.some((l) => l.gps_synced_at), [fuelLogs]);
+
+  // Tankful-method mileage: GPS(first→last fill) ÷ (fuel minus the latest fill).
+  const monthMileage = useMemo(
+    () => mileageForMonth(fuelLogs, new Date().toISOString().slice(0, 7)),
+    [fuelLogs],
+  );
+  const allTimeMileage = useMemo(() => computeMileage(fuelLogs), [fuelLogs]);
 
   // Monthly summary for fuel logs (current calendar month)
   const currentMonthSummary = useMemo(() => {
@@ -496,6 +505,14 @@ export function VehicleProfileTabs({
               </div>
             )}
 
+            {/* Mileage — tankful method, with the calculation in a tooltip */}
+            {isCompany && (
+              <div className="grid grid-cols-2 gap-3">
+                <MileageCard m={monthMileage} label="Is mahine ka mileage" />
+                <MileageCard m={allTimeMileage} label="All-time mileage" />
+              </div>
+            )}
+
             {/* Add Entry — company + canManage only. Big primary button reveals the simple form. */}
             {canAddFuelLog && (
               showFuelForm ? (
@@ -875,6 +892,33 @@ function FuelStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-center">
       <p className="text-lg font-bold text-slate-900 sm:text-xl">{value}</p>
+      <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function MileageCard({ m, label }: { m: MileageBreakdown | null; label: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-center">
+      {m ? (
+        <Tooltip
+          content={
+            <span className="block">
+              {m.distanceKm.toLocaleString("en-IN")} km ÷ {m.litres} L = {m.kmpl} km/L
+              <br />
+              {formatDate(m.fromDate)} → {formatDate(m.toDate)} · {m.fills} fills
+              <br />
+              <span className="text-slate-400">aakhri fill chhod ke (woh abhi jala nahi)</span>
+            </span>
+          }
+        >
+          <span className="cursor-help text-lg font-bold text-slate-900 underline decoration-dotted decoration-slate-300 underline-offset-4 sm:text-xl">
+            {m.kmpl} <span className="text-sm font-medium text-slate-500">km/L</span>
+          </span>
+        </Tooltip>
+      ) : (
+        <p className="text-lg font-bold text-slate-300 sm:text-xl">—</p>
+      )}
       <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
     </div>
   );

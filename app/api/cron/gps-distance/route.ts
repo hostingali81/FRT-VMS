@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { syncMonthlyGpsDistance } from "@/lib/gps-distance";
+import { syncFuelSegmentDistances, syncMonthlyGpsDistance } from "@/lib/gps-distance";
 
 // Node runtime (needs the Millitrack HTTP fetch + admin client); never cache.
 export const dynamic = "force-dynamic";
@@ -20,5 +20,7 @@ export async function GET(request: Request) {
   }
 
   const result = await syncMonthlyGpsDistance();
-  return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+  // Also refresh per-fill segment distances (power the mileage figures).
+  const segments = await syncFuelSegmentDistances();
+  return NextResponse.json({ ...result, segments }, { status: result.ok ? 200 : 500 });
 }

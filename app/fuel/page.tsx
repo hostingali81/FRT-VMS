@@ -7,8 +7,10 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
+import { Tooltip } from "@/components/ui/tooltip";
 import { requireProfile } from "@/lib/auth";
 import {
+  getAllFuelLogs,
   getAllLookups,
   getFuelLogsForMonth,
   getGpsDistanceForMonth,
@@ -17,7 +19,9 @@ import {
   preloadFuelMonthData,
 } from "@/lib/data";
 import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
+import { computeMileage, type MileageBreakdown } from "@/lib/mileage";
 import { syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
+import { formatDate } from "@/lib/utils/format";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
@@ -46,9 +50,10 @@ export default async function FuelDashboardPage({
   preloadFuelMonthData(yearMonth);
   const profile = await requireProfile();
 
-  const [vehicles, fuelLogs, gpsDistance, lookups] = await Promise.all([
+  const [vehicles, fuelLogs, allFuelLogs, gpsDistance, lookups] = await Promise.all([
     getVehicles(profile),
     getFuelLogsForMonth(profile, yearMonth),
+    getAllFuelLogs(profile),
     getGpsDistanceForMonth(yearMonth),
     getAllLookups(),
   ]);
@@ -59,6 +64,13 @@ export default async function FuelDashboardPage({
   for (const log of fuelLogs) {
     if (!logsByVehicle.has(log.vehicle_id)) logsByVehicle.set(log.vehicle_id, []);
     logsByVehicle.get(log.vehicle_id)!.push(log);
+  }
+
+  // All logs per vehicle → all-time mileage.
+  const allLogsByVehicle = new Map<string, typeof allFuelLogs>();
+  for (const log of allFuelLogs) {
+    if (!allLogsByVehicle.has(log.vehicle_id)) allLogsByVehicle.set(log.vehicle_id, []);
+    allLogsByVehicle.get(log.vehicle_id)!.push(log);
   }
 
   // Monthly GPS distance (set by "Sync GPS Data") for the selected month.
@@ -76,23 +88,28 @@ export default async function FuelDashboardPage({
     const totalLitres = +logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0).toFixed(2);
     const totalAmount = logs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0);
     const gpsKm = gpsKmByVehicle.get(v.vehicle_id) ?? 0;
-    // Average only when BOTH fuel and GPS distance exist — no fuel => no average (avoids confusion).
-    const avg = totalLitres > 0 && gpsKm > 0 ? +(gpsKm / totalLitres).toFixed(1) : null;
+    // Mileage uses the tankful method (GPS first→last fill ÷ fuel minus the latest
+    // fill), not the raw monthly GPS ÷ litres.
+    const monthlyMileage = computeMileage(logs);
+    const allTimeMileage = computeMileage(allLogsByVehicle.get(v.vehicle_id) ?? []);
     const hasGps = Boolean(v.gps_device_id);
     const canManage = canEditVehicle(profile, v, lookups);
-    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, avg, hasGps, canManage };
+    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, monthlyMileage, allTimeMileage, hasGps, canManage };
   }).sort((a, b) => frtSortKey(a.vehicle.frt_no) - frtSortKey(b.vehicle.frt_no));
 
   const companyRows = rows.filter((r) => r.vehicle.fuel_ownership === "company");
   const grandLitres = +companyRows.reduce((sum, r) => sum + r.totalLitres, 0).toFixed(2);
   const grandAmount = companyRows.reduce((sum, r) => sum + r.totalAmount, 0);
   const grandKm = rows.reduce((sum, r) => sum + r.gpsKm, 0);
-  // "Company distance" and the fleet average count every vehicle the company is
-  // responsible for fuelling (fuel_ownership === "company"), regardless of whether
-  // fuel was logged this month. Vendor-fuelled vehicles are excluded — the company
-  // doesn't fuel them. The average reconciles as companyKm / grandLitres.
+  // "Company distance" counts every vehicle the company is responsible for fuelling
+  // (fuel_ownership === "company"), regardless of whether fuel was logged this month.
+  // Vendor-fuelled vehicles are excluded — the company doesn't fuel them.
   const companyKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
-  const grandAvg = grandLitres > 0 && companyKm > 0 ? +(companyKm / grandLitres).toFixed(1) : null;
+  // Fleet monthly mileage = total mileage-distance ÷ total mileage-fuel across the
+  // company vehicles that have a computable figure (reconciles with each row's avg).
+  const fleetMileageKm = companyRows.reduce((sum, r) => sum + (r.monthlyMileage?.distanceKm ?? 0), 0);
+  const fleetMileageL = companyRows.reduce((sum, r) => sum + (r.monthlyMileage?.litres ?? 0), 0);
+  const grandAvg = fleetMileageL > 0 ? +(fleetMileageKm / fleetMileageL).toFixed(1) : null;
 
   // GPS sync is open to vehicle managers; the action itself scopes each role to
   // the vehicles it can edit (super_admin syncs the whole fleet).
@@ -192,12 +209,13 @@ export default async function FuelDashboardPage({
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Fuel (L)</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Cost (₹)</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">KM (GPS)</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Avg km/L</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Mileage (mo)</th>
+                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">All-time</th>
                     <th className="px-3 py-2.5 sm:px-5 sm:py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rows.map(({ vehicle, logs, totalLitres, totalAmount, gpsKm, avg, hasGps, canManage }) => {
+                  {rows.map(({ vehicle, logs, totalLitres, totalAmount, gpsKm, monthlyMileage, allTimeMileage, hasGps, canManage }) => {
                     const isCompany = vehicle.fuel_ownership === "company";
                     return (
                       <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
@@ -256,11 +274,10 @@ export default async function FuelDashboardPage({
                           )}
                         </td>
                         <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          {avg !== null ? (
-                            <Badge tone="green">{avg}</Badge>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
+                          <MileageCell m={monthlyMileage} tone="green" label="Is mahine" />
+                        </td>
+                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
+                          <MileageCell m={allTimeMileage} tone="blue" label="All-time" />
                         </td>
                         <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {isCompany && canManage && (
@@ -283,6 +300,28 @@ export default async function FuelDashboardPage({
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** Mileage badge with a tooltip that spells out the calculation. */
+function MileageCell({ m, tone, label }: { m: MileageBreakdown | null; tone: "green" | "blue"; label: string }) {
+  if (!m) return <span className="text-slate-300">—</span>;
+  return (
+    <Tooltip
+      content={
+        <span className="block">
+          <span className="font-semibold">{label}: {m.kmpl} km/L</span>
+          <br />
+          {m.distanceKm.toLocaleString("en-IN")} km ÷ {m.litres} L
+          <br />
+          {formatDate(m.fromDate)} → {formatDate(m.toDate)} · {m.fills} fills
+          <br />
+          <span className="text-slate-400">aakhri fill chhod ke</span>
+        </span>
+      }
+    >
+      <Badge tone={tone}>{m.kmpl}</Badge>
+    </Tooltip>
   );
 }
 
