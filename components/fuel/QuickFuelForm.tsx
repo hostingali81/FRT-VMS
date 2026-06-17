@@ -41,6 +41,19 @@ export function QuickFuelForm({
   const [vehicleId, setVehicleId] = useState(lockedVehicle?.vehicle_id ?? "");
   const [fuelType, setFuelType] = useState<FuelType>(normalizeFuelType(lockedVehicle?.fuel_type));
 
+  // Custom 12-hour time picker — the native <input type="time"> shows 24-hour
+  // (no AM/PM) on many devices. Hour blank → no time sent (stays optional).
+  const [hour, setHour] = useState("");
+  const [minute, setMinute] = useState("00");
+  const [ampm, setAmpm] = useState("AM");
+  const logTime = (() => {
+    if (!hour) return "";
+    let h = parseInt(hour, 10);
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${minute}`;
+  })();
+
   const selectedVehicle = vehicles.find((v) => v.vehicle_id === vehicleId);
 
   return (
@@ -126,7 +139,24 @@ export function QuickFuelForm({
           <Label className="text-base">
             Approx Time <span className="font-normal text-slate-400">(optional)</span>
           </Label>
-          <Input name="log_time" type="time" className="h-12 text-base" />
+          <div className="grid grid-cols-3 gap-2">
+            <Select value={hour} onChange={(e) => setHour(e.target.value)} className="h-12 text-base" aria-label="Hour">
+              <option value="">Hr</option>
+              {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </Select>
+            <Select value={minute} onChange={(e) => setMinute(e.target.value)} className="h-12 text-base" aria-label="Minute">
+              {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map((m) => (
+                <option key={m} value={m}>:{m}</option>
+              ))}
+            </Select>
+            <Select value={ampm} onChange={(e) => setAmpm(e.target.value)} className="h-12 text-base" aria-label="AM or PM">
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </Select>
+          </div>
+          <input type="hidden" name="log_time" value={logTime} />
           <p className="text-xs text-slate-400">Time daloge to mileage zyada accurate aayega.</p>
         </div>
       </div>
