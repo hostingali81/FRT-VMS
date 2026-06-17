@@ -115,10 +115,20 @@ export function QuickFuelForm({
         </div>
       </div>
 
-      {/* Date */}
-      <div className="space-y-1.5">
-        <Label className="text-base">Date</Label>
-        <Input name="log_date" type="date" defaultValue={today} required className="h-12 text-base" />
+      {/* Date + approximate time. Time is optional but makes the mileage more
+          accurate (GPS distance is measured between the two fills' exact times). */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-base">Date</Label>
+          <Input name="log_date" type="date" defaultValue={today} required className="h-12 text-base" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-base">
+            Approx Time <span className="font-normal text-slate-400">(optional)</span>
+          </Label>
+          <Input name="log_time" type="time" className="h-12 text-base" />
+          <p className="text-xs text-slate-400">Time daloge to mileage zyada accurate aayega.</p>
+        </div>
       </div>
 
       {/* Litres + Amount */}

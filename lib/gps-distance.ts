@@ -192,6 +192,10 @@ type SegmentVehicle = {
   gps_company: string | null;
 };
 
+/** Absolute instant for a fill: its exact logged_at if set, else the date's midnight. */
+const fuelLogInstant = (log: { log_date: string; logged_at: string | null }) =>
+  log.logged_at ? Date.parse(log.logged_at) : Date.parse(`${log.log_date}T00:00:00.000Z`);
+
 /** Distance (km) for one segment window, picking the provider from gps_company. */
 async function segmentDistanceKm(
   vehicle: SegmentVehicle,
@@ -262,7 +266,7 @@ export async function syncFuelSegmentDistances(
     try {
       const { data: logs } = await supabase
         .from("vehicle_fuel_logs")
-        .select("id,log_date,created_at,gps_distance_km")
+        .select("id,log_date,logged_at,created_at,gps_distance_km")
         .eq("vehicle_id", vehicle.id)
         .order("log_date", { ascending: true })
         .order("created_at", { ascending: true });
@@ -273,13 +277,13 @@ export async function syncFuelSegmentDistances(
       for (let i = 1; i < logs.length; i++) {
         if (logs[i].gps_distance_km != null) continue; // closed segment — skip
 
-        const prevDate = logs[i - 1].log_date as string;
-        const currDate = logs[i].log_date as string;
-        const fromMs = Date.parse(`${prevDate}T00:00:00.000Z`);
-        const toMs = Date.parse(`${currDate}T00:00:00.000Z`);
+        // Exact fill times when available, else the date's midnight. With times,
+        // multiple fills on the same day get a real (non-zero) gap.
+        const fromMs = fuelLogInstant(logs[i - 1]);
+        const toMs = fuelLogInstant(logs[i]);
 
-        // Two fills on the same date have no measurable gap. Record 0 (not null) so
-        // the segment is "closed" and the mileage maths can still proceed.
+        // No measurable gap (same date, no times) → record 0 (not null) so the
+        // segment is "closed" and the mileage maths can still proceed.
         const segKm = toMs > fromMs ? await segmentDistanceKm(vehicle, fromMs, toMs, mtReady, weReady) : 0;
 
         const { error: upErr } = await supabase

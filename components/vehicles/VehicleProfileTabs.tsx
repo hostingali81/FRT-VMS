@@ -588,7 +588,12 @@ export function VehicleProfileTabs({
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {fuelLogsWithDerived.map((log) => (
                         <tr key={log.id} className="hover:bg-slate-50">
-                          <td className="px-5 py-3.5 font-medium text-slate-900">{formatDate(log.log_date)}</td>
+                          <td className="px-5 py-3.5 font-medium text-slate-900">
+                            {formatDate(log.log_date)}
+                            {log.logged_at && (
+                              <span className="block text-xs font-normal text-slate-400">{formatTimeIST(log.logged_at)}</span>
+                            )}
+                          </td>
                           <td className="px-5 py-3.5 text-slate-600">{log.fuel_type ?? "—"}</td>
                           <td className="px-5 py-3.5 text-slate-700">{log.fuel_litres} L</td>
                           <td className="px-5 py-3.5 text-slate-700">
@@ -871,6 +876,17 @@ function Field({
       <dd className="text-sm font-medium text-slate-800">{children}</dd>
     </div>
   );
+}
+
+function formatTimeIST(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 function formatYearMonth(ym: string) {

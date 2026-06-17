@@ -332,8 +332,19 @@ export async function addFuelLogAction(formData: FormData) {
     redirect(errorBack("Fuel entries are only for company-fuel vehicles"));
   }
 
+  // Combine date + approximate time (entered in IST) into an absolute instant for
+  // the GPS segment window. Blank/invalid time → null (the sync falls back to the
+  // date's midnight).
+  let loggedAt: string | null = null;
+  if (data.log_time) {
+    const dt = new Date(`${data.log_date}T${data.log_time}:00+05:30`);
+    if (!Number.isNaN(dt.getTime())) loggedAt = dt.toISOString();
+  }
+
   const supabase = requireAdminClient();
-  const { error } = await supabase.from("vehicle_fuel_logs").insert({
+  // Only send logged_at when a time was given, so "date only" entries keep working
+  // even if the logged_at column hasn't been migrated yet.
+  const insertRow: Record<string, unknown> = {
     vehicle_id: data.vehicle_id,
     log_date: data.log_date,
     fuel_type: data.fuel_type,
@@ -341,7 +352,9 @@ export async function addFuelLogAction(formData: FormData) {
     fuel_amount: data.fuel_amount ?? null,
     recorded_by: profile.name,
     notes: data.notes ?? null,
-  });
+  };
+  if (loggedAt) insertRow.logged_at = loggedAt;
+  const { error } = await supabase.from("vehicle_fuel_logs").insert(insertRow);
 
   if (error) throw new Error("Failed to save fuel entry: " + error.message);
 

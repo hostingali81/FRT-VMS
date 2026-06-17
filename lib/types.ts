@@ -249,6 +249,7 @@ export type FuelLogEntry = {
   id: string;
   vehicle_id: string;
   log_date: string;
+  logged_at?: string | null; // optional approximate fill instant (ISO); improves GPS-segment accuracy
   fuel_type: FuelLogType | null;
   fuel_litres: number;
   fuel_amount: number | null;
