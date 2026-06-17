@@ -144,7 +144,11 @@ export function Select({
       return;
     }
     updatePosition();
-    searchRef.current?.focus();
+    // Auto-focus the search box for type-ahead only on devices with a real
+    // keyboard. On touch devices, focusing it pops up the on-screen keyboard
+    // before the user has even tapped the search field — they can still tap it
+    // to search.
+    if (!window.matchMedia?.("(pointer: coarse)").matches) searchRef.current?.focus();
 
     function onScrollOrResize() {
       updatePosition();
