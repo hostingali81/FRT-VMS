@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
 import type { FleetVehicle, LookupData } from "@/lib/types";
 import { formatDate } from "@/lib/utils/format";
+import { istToday } from "@/lib/utils/month";
 
 // Reason values are stored as-is in transfer history, so keep them stable.
 // `hint` is only shown in the dropdown to make each reason self-explanatory.
@@ -95,7 +96,7 @@ export function TransferForm({
             </div>
           ) : null}
           <Field label="Transfer Date">
-            <Input name="transfer_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+            <Input name="transfer_date" type="date" defaultValue={istToday()} required />
           </Field>
           <Field label="Reason">
             <Select name="reason" value={reason} onChange={(event) => setReason(event.target.value)}>

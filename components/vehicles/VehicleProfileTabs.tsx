@@ -25,6 +25,7 @@ import type {
   TransferRecord,
 } from "@/lib/types";
 import { formatDate, formatDateTime, titleCase } from "@/lib/utils/format";
+import { currentYearMonth, istToday } from "@/lib/utils/month";
 import { cn } from "@/lib/utils/cn";
 
 type QuickAction = "status" | "fuel" | "driver" | null;
@@ -90,7 +91,7 @@ export function VehicleProfileTabs({
     [availableDrivers],
   );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istToday();
 
   // Newest first; avg = GPS distance (km since previous fill) / litres of this fill
   const fuelLogsWithDerived = useMemo(() => {
@@ -110,14 +111,14 @@ export function VehicleProfileTabs({
 
   // Tankful-method mileage: GPS(first→last fill) ÷ (fuel minus the latest fill).
   const monthMileage = useMemo(
-    () => mileageForMonth(fuelLogs, new Date().toISOString().slice(0, 7)),
+    () => mileageForMonth(fuelLogs, currentYearMonth()),
     [fuelLogs],
   );
   const allTimeMileage = useMemo(() => computeMileage(fuelLogs), [fuelLogs]);
 
   // Monthly summary for fuel logs (current calendar month)
   const currentMonthSummary = useMemo(() => {
-    const monthStr = new Date().toISOString().slice(0, 7);
+    const monthStr = currentYearMonth();
     const monthLogs = fuelLogs.filter((l) => l.log_date.startsWith(monthStr));
     return {
       entries: monthLogs.length,

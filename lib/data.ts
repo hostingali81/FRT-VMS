@@ -37,6 +37,7 @@ import {
   type VehicleHistoryItem,
 } from "@/lib/types";
 import { getWorstDocumentState } from "@/lib/utils/expiry";
+import { currentYearMonth } from "@/lib/utils/month";
 
 async function selectRows<T>(view: string, fallback: T[], orderColumn?: string) {
   const supabase = createSupabaseAdminClient();
@@ -474,7 +475,7 @@ export async function getFuelLogsForMonth(
   profile?: UserProfile | null,
   yearMonth?: string,
 ): Promise<FuelLogEntry[]> {
-  const month = yearMonth ?? new Date().toISOString().slice(0, 7);
+  const month = yearMonth ?? currentYearMonth();
   const allLogs = await fetchFuelLogsForMonth(month);
   if (!profile) return allLogs;
 

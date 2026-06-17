@@ -1,10 +1,14 @@
+// All app dates/times are shown in IST (Asia/Kolkata) so they read the same on the
+// UTC Vercel server and in any browser. Times use 12-hour AM/PM.
+
 export function formatDate(date: string | null | undefined) {
   if (!date) return "Not set";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(`${date}T00:00:00`));
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(`${date}T00:00:00+05:30`));
 }
 
 export function formatDateTime(date: string | null | undefined) {
@@ -15,6 +19,8 @@ export function formatDateTime(date: string | null | undefined) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
   }).format(new Date(date));
 }
 

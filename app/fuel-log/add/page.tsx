@@ -8,6 +8,7 @@ import { addFuelLogAction } from "@/lib/actions/vehicle-actions";
 import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getVehicles, preloadFleetData } from "@/lib/data";
 import { canEditVehicle } from "@/lib/permissions";
+import { istToday } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function AddFuelEntryPage({
       fuel_type: v.fuel_type,
     }));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istToday();
 
   return (
     <AppShell profile={profile}>

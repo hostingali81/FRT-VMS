@@ -7,9 +7,10 @@ import { getAllLookups, getVehicle } from "@/lib/data";
 import { canAccessLocation, canCreateVehicle, canEditVehicle, canManageDrivers, canTransferVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { driverOwnershipSchema, driverSchema, fuelLogSchema, fuelOwnershipSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
+import { istToday } from "@/lib/utils/month";
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return istToday();
 }
 
 function requireAdminClient() {

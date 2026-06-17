@@ -1,8 +1,17 @@
 // Shared month helpers for the Fuel Dashboard / Fuel Log month navigator.
 // yearMonth format: "YYYY-MM"
 
+/**
+ * Today's date as "YYYY-MM-DD" in IST, independent of the server's or browser's
+ * timezone. (toISOString() is always UTC, which between midnight and 5:30 AM IST
+ * returns the previous day — so we format in Asia/Kolkata instead.)
+ */
+export function istToday(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
 export function currentYearMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return istToday().slice(0, 7);
 }
 
 export function isValidYearMonth(value: string | undefined): value is string {
