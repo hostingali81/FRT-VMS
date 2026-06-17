@@ -139,19 +139,20 @@ export function QuickFuelForm({
           <Label className="text-base">
             Approx Time <span className="font-normal text-slate-400">(optional)</span>
           </Label>
-          <div className="grid grid-cols-3 gap-2">
-            <Select value={hour} onChange={(e) => setHour(e.target.value)} className="h-12 text-base" aria-label="Hour">
+          <div className="flex items-center gap-1.5">
+            <Select value={hour} onChange={(e) => setHour(e.target.value)} className="h-12 flex-1 text-base" aria-label="Hour">
               <option value="">Hr</option>
               {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((h) => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </Select>
-            <Select value={minute} onChange={(e) => setMinute(e.target.value)} className="h-12 text-base" aria-label="Minute">
+            <span className="text-lg font-semibold text-slate-400">:</span>
+            <Select value={minute} onChange={(e) => setMinute(e.target.value)} className="h-12 flex-1 text-base" aria-label="Minute">
               {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map((m) => (
-                <option key={m} value={m}>:{m}</option>
+                <option key={m} value={m}>{m}</option>
               ))}
             </Select>
-            <Select value={ampm} onChange={(e) => setAmpm(e.target.value)} className="h-12 text-base" aria-label="AM or PM">
+            <Select value={ampm} onChange={(e) => setAmpm(e.target.value)} className="h-12 flex-1 text-base" aria-label="AM or PM">
               <option value="AM">AM</option>
               <option value="PM">PM</option>
             </Select>
