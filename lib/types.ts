@@ -275,3 +275,62 @@ export type VehicleHistoryItem = {
   remarks: string | null;
   is_cross_circle: boolean;
 };
+
+// ── Live GPS tracking (Millitrack userDevicesState) ──────────────────────────
+// The provider buckets every device into exactly one of these live states.
+export const LIVE_STATUSES = [
+  "running",
+  "idle",
+  "stopped",
+  "inactive",
+  "noData",
+  "expired",
+  "expiringSoon",
+] as const;
+export type LiveStatus = (typeof LIVE_STATUSES)[number];
+
+export type FleetLiveCounts = Record<LiveStatus, number> & { total: number };
+
+/** Which GPS platform a live record came from. */
+export type LiveProvider = "VehicleStep" | "WheelsEye";
+
+/**
+ * One vehicle's live position/status — a GPS device joined to a VMS vehicle.
+ * Fields are nullable because providers differ: Millitrack (VehicleStep) reports
+ * speed/address/charge/blocked, while WheelsEye's server API only gives
+ * status/location/ignition (speed & address there come from the web DOM, which we
+ * can't read server-side). `null` means "this provider doesn't report it".
+ */
+export type LiveVehicleStatus = {
+  vehicle_id: string;
+  registration_no: string;
+  frt_no: string | null;
+  circle: string | null;
+  division: string | null;
+  substation: string | null;
+  provider: LiveProvider;
+  device_id: number;
+  device_name: string | null;
+  live_status: LiveStatus;
+  speed_kmh: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  address: string | null;
+  ignition: boolean | null;
+  charge: boolean | null;
+  blocked: boolean | null;
+  today_distance_km: number | null;
+  course: number | null;
+  last_update: string | null; // ISO
+};
+
+/** Permission-scoped live snapshot for the /live page. */
+export type FleetLiveStatus = {
+  configured: boolean; // GPS provider credentials present
+  ok: boolean; // live fetch succeeded
+  error?: string;
+  counts: FleetLiveCounts; // computed over the visible vehicles only
+  vehicles: LiveVehicleStatus[];
+  untracked: number; // visible GPS-mapped vehicles missing from the live feed
+  fetchedAt: string; // ISO instant the snapshot was taken
+};

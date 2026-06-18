@@ -14,6 +14,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  Radio,
   Route,
   Settings,
   UserRound,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils/cn";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/vehicles", label: "Vehicles", icon: CarFront },
+  { href: "/live", label: "Live Tracking", icon: Radio },
   { href: "/drivers", label: "Drivers", icon: UserRound },
   { href: "/fuel", label: "Fuel Dashboard", icon: Droplets },
   { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
@@ -42,7 +44,7 @@ const bottomNavItems = [
   { href: "/fuel", label: "Fuel", icon: Droplets },
   { href: "/vehicles", label: "Vehicles", icon: CarFront },
   { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
-  { href: "/gps-distance", label: "GPS", icon: Route },
+  { href: "/live", label: "Live", icon: Radio },
 ];
 
 function isActive(pathname: string, href: string) {

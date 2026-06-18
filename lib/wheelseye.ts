@@ -2,20 +2,71 @@
  * WheelsEye GPS platform client. Server-only — call only from server actions / cron.
  *
  * Auth: POST /shield/admin/v3/login with { userName: <phone>, password } returns
- * data.accessToken (a UUID). That token goes in the `token` header on subsequent
- * calls. No env token needed — we log in with WHEELSEYE_LOGIN + WHEELSEYE_PASSWORD
- * and cache the token in memory (re-login on 401/403, same as Millitrack).
+ * data.accessToken (a UUID), sent in the `token` header on later calls. We log in
+ * with WHEELSEYE_LOGIN + WHEELSEYE_PASSWORD and cache the token in memory.
  *
- * Distance comes from the report API in one call for all vehicles (KM already in km).
+ * IMPORTANT — the login must look like the browser (full User-Agent / sec-ch-ua /
+ * deviceId-cookie set, see baseHeaders). A "plain" login yields a token that the
+ * live `vehicles-dynamic` endpoint silently rejects (HTTP 200 with empty `data`).
+ * With browser-like headers the same endpoint returns full telemetry.
+ *
+ * Live data (getWheelsEyeLiveState): the rich per-vehicle live feed comes from
+ *   POST /rest/argus/app/vehicles-dynamic  { vehicleIds: number[] }
+ * keyed by the *static* vehicleId (from /rest/argus/app/vehicles/static — NOT the
+ * id returned by /vehicle/getAll). The endpoint rejects oversized batches, so ids
+ * are sent in chunks of <= DYNAMIC_BATCH. It returns speed, today's km
+ * (sanitizedDistance), reverse-geocoded address, ignition, mode and lat/lng — i.e.
+ * the same figures the WheelsEye dashboard shows.
+ *
+ * Distance (cron) still comes from the report API (wheelsEyeDistanceByReg).
  */
 
+import { randomUUID } from "node:crypto";
+import type { LiveStatus } from "@/lib/types";
+
 const BASE = process.env.WHEELSEYE_BASE_URL ?? "https://wheelseye.com";
+const WE_APP_VERSION = "18.4.0";
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+// vehicles-dynamic returns empty `data` for batches larger than this, so chunk.
+const DYNAMIC_BATCH = 10;
 
 let cachedToken: string | null = null;
+let cachedDeviceId: string | null = null;
 
 export function isWheelsEyeConfigured() {
   return Boolean(process.env.WHEELSEYE_LOGIN && process.env.WHEELSEYE_PASSWORD);
 }
+
+// A stable per-process deviceId, like the web app stores in a cookie.
+function deviceId(): string {
+  if (!cachedDeviceId) cachedDeviceId = randomUUID();
+  return cachedDeviceId;
+}
+
+// Browser-like headers. The User-Agent / sec-ch-ua / deviceId cookie are what make
+// the issued token acceptable to the live endpoints (see file header).
+function baseHeaders(): Record<string, string> {
+  return {
+    accept: "application/json, text/plain, */*",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json",
+    cookie: `deviceId=${deviceId()}`,
+    origin: BASE,
+    referer: `${BASE}/node/dashboard`,
+    "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    source: "OPERATOR_WEB",
+    "user-agent": UA,
+    "x-app-version": WE_APP_VERSION,
+  };
+}
+
+const authHeaders = (token: string) => ({ ...baseHeaders(), token });
 
 async function login(): Promise<string> {
   const userName = process.env.WHEELSEYE_LOGIN;
@@ -24,7 +75,7 @@ async function login(): Promise<string> {
 
   const res = await fetch(`${BASE}/shield/admin/v3/login`, {
     method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers: { ...baseHeaders(), referer: `${BASE}/` },
     body: JSON.stringify({ userName, password }),
     cache: "no-store",
   });
@@ -43,34 +94,29 @@ async function getToken(forceRefresh = false): Promise<string> {
   return cachedToken;
 }
 
-const authHeaders = (token: string) => ({
-  Accept: "application/json",
-  "Content-Type": "application/json",
-  token,
-  source: "OPERATOR_WEB",
-  "x-app-version": "18.4.0",
-});
+/** GET/POST a WheelsEye API path with the cached token; re-logs in once on 401/403. */
+async function weRequest(path: string, init?: RequestInit): Promise<unknown> {
+  let token = await getToken();
+  const doFetch = (t: string) =>
+    fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { ...authHeaders(t), ...((init?.headers as Record<string, string>) ?? {}) },
+      cache: "no-store",
+    });
+
+  let res = await doFetch(token);
+  if (res.status === 401 || res.status === 403) {
+    cachedToken = null;
+    token = await getToken(true);
+    res = await doFetch(token);
+  }
+  if (!res.ok) throw new Error(`WheelsEye ${path.split("?")[0]} failed (${res.status})`);
+  return res.json();
+}
 
 const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 type WeVehicle = { name: string; value: number };
-
-async function getVehicleList(token: string): Promise<WeVehicle[]> {
-  const res = await fetch(`${BASE}/vehicle/getAll`, { headers: authHeaders(token) });
-  if (res.status === 401 || res.status === 403) {
-    cachedToken = null;
-    const fresh = await getToken(true);
-    return getVehicleListWith(fresh);
-  }
-  if (!res.ok) throw new Error(`WheelsEye getAll failed (${res.status})`);
-  return parseVehicleList(await res.json());
-}
-
-async function getVehicleListWith(token: string): Promise<WeVehicle[]> {
-  const res = await fetch(`${BASE}/vehicle/getAll`, { headers: authHeaders(token) });
-  if (!res.ok) throw new Error(`WheelsEye getAll failed (${res.status})`);
-  return parseVehicleList(await res.json());
-}
 
 function parseVehicleList(json: unknown): WeVehicle[] {
   const arr = (Array.isArray(json) ? json : (json as { data?: unknown[] })?.data ?? []) as Array<{ vNo?: string; vId?: number }>;
@@ -80,13 +126,12 @@ function parseVehicleList(json: unknown): WeVehicle[] {
 /**
  * Distance (km) per registration over [fromSec, toSec] (Unix seconds).
  * Returns Map keyed by normalized registration (UPPER, no spaces/dashes).
- * One report call covers every vehicle on the WheelsEye account.
+ * One report call covers every vehicle on the WheelsEye account. Used by the cron.
  */
 export async function wheelsEyeDistanceByReg(fromSec: number, toSec: number): Promise<Map<string, number>> {
-  let token = await getToken();
-  const vehicles = await getVehicleList(token);
+  const vehicles = parseVehicleList(await weRequest("/vehicle/getAll"));
 
-  const buildBody = () => ({
+  const body = {
     reportType: "distance",
     filters: [
       { code: "vehicles", options: vehicles.map((v) => ({ name: v.name, value: v.value, isSelected: true })) },
@@ -96,20 +141,12 @@ export async function wheelsEyeDistanceByReg(fromSec: number, toSec: number): Pr
       },
       { code: "report_type", options: [{ name: "Distance", value: "distance", isSelected: true }] },
     ],
-  });
+  };
 
-  const doFetch = (t: string) =>
-    fetch(`${BASE}/rest/argus/reports/generate/v2`, { method: "POST", headers: authHeaders(t), body: JSON.stringify(buildBody()) });
-
-  let res = await doFetch(token);
-  if (res.status === 401 || res.status === 403) {
-    cachedToken = null;
-    token = await getToken(true);
-    res = await doFetch(token);
-  }
-  if (!res.ok) throw new Error(`WheelsEye report failed (${res.status})`);
-
-  const json = (await res.json()) as { success?: boolean; message?: string; data?: { reportContent?: { data?: unknown[][] } } };
+  const json = (await weRequest("/rest/argus/reports/generate/v2", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })) as { success?: boolean; message?: string; data?: { reportContent?: { data?: unknown[][] } } };
   if (!json?.success) throw new Error(`WheelsEye report error: ${json?.message ?? "unknown"}`);
 
   const rows = json.data?.reportContent?.data ?? [];
@@ -117,6 +154,197 @@ export async function wheelsEyeDistanceByReg(fromSec: number, toSec: number): Pr
   for (const r of rows) {
     // [vehicleNo, fromDate, toDate, distanceKM, timeTaken, hasDevice]
     map.set(normReg(String(r[0])), parseFloat(String(r[3])) || 0);
+  }
+  return map;
+}
+
+// ── Live status/location/telemetry (vehicles-dynamic) ────────────────────────
+
+/** Normalized WheelsEye live record, keyed by normalized registration. */
+export type WheelsEyeLiveState = {
+  vehicleId: number;
+  registration: string;
+  status: LiveStatus;
+  speedKmh: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  address: string | null;
+  ignition: boolean | null;
+  blocked: boolean | null; // parking lock / immobiliser
+  course: number | null;
+  todayDistanceKm: number | null;
+  lastUpdate: string | null; // ISO
+};
+
+type DynamicVehicle = {
+  speed?: number;
+  sanitizedDistance?: number;
+  latitude?: number;
+  longitude?: number;
+  angle?: number;
+  mode?: string;
+  ignitionState?: string;
+  addr?: string;
+  time?: number; // unix seconds
+  parkLockActive?: boolean;
+};
+
+/** Map WheelsEye's mode + ignition to our LiveStatus. */
+function deriveStatus(mode: string | undefined, ignState: string | undefined): LiveStatus {
+  const m = String(mode ?? "").toUpperCase();
+  if (m === "DRIVING") return "running";
+  if (m === "NO_INFO") return "noData";
+  if (String(ignState ?? "").toUpperCase() === "ON") return "idle";
+  return "stopped";
+}
+
+const fin = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+// The static fleet (vehicleId ↔ registration) rarely changes; cache it for a while.
+// These vehicleIds are the keys vehicles-dynamic expects (≠ /vehicle/getAll's vId).
+const STATIC_TTL_MS = 60 * 60 * 1000;
+let staticCache: { at: number; idToReg: Map<number, string> } | null = null;
+
+// Per-vehicle dynamic telemetry cache, shared across all callers/scopes and keyed
+// by vehicleId. A vehicle fetched for one user (or refresh tick) is reused for any
+// other within the TTL, so concurrent viewers and the 30s/focus refreshes collapse
+// into far fewer upstream calls. Permission scoping happens in the caller, so it is
+// safe to share raw telemetry here.
+const DYNAMIC_TTL_MS = 10_000;
+type DynamicEntry = { at: number; data: DynamicVehicle };
+const dynamicCache = new Map<number, DynamicEntry>();
+// Last time vehicles-dynamic returned ≥1 record. Lets us tell a silently-rejected
+// token (HTTP 200 + empty data) apart from a small batch that is just genuinely
+// offline, so we only force a re-login when there's no recent proof the token works.
+let dynamicOkAt = 0;
+const DYNAMIC_TRUST_MS = 60_000;
+
+async function fetchStaticFleet(): Promise<Map<number, string>> {
+  if (staticCache && Date.now() - staticCache.at < STATIC_TTL_MS) return staticCache.idToReg;
+
+  const idToReg = new Map<number, string>();
+  for (let page = 0; page < 50; page++) {
+    const json = (await weRequest(`/rest/argus/app/vehicles/static?pageNo=${page}&size=50`)) as {
+      data?: { list?: Array<{ vehicleId?: number; vehicleNumber?: string }>; totalPages?: number };
+    };
+    const list = json?.data?.list ?? [];
+    for (const v of list) {
+      const id = Number(v?.vehicleId);
+      const reg = String(v?.vehicleNumber ?? "").trim();
+      if (id > 0 && reg) idToReg.set(id, reg);
+    }
+    if (page >= Number(json?.data?.totalPages ?? 1) - 1) break;
+  }
+  staticCache = { at: Date.now(), idToReg };
+  return idToReg;
+}
+
+// Upstream rejects oversized batches, so we keep DYNAMIC_BATCH chunks but run a few
+// in parallel instead of strictly one-after-another — the chunk count, not latency,
+// then drives wall-clock time. Bounded so we don't hammer the endpoint at once.
+const DYNAMIC_CONCURRENCY = 5;
+
+/** Fetch dynamic telemetry for the given ids, in parallel chunks, keyed by vehicleId. */
+async function fetchDynamic(ids: number[]): Promise<Map<number, DynamicVehicle>> {
+  const out = new Map<number, DynamicVehicle>();
+  const chunks: number[][] = [];
+  for (let i = 0; i < ids.length; i += DYNAMIC_BATCH) chunks.push(ids.slice(i, i + DYNAMIC_BATCH));
+
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < chunks.length) {
+      const chunk = chunks[cursor++];
+      const json = (await weRequest("/rest/argus/app/vehicles-dynamic", {
+        method: "POST",
+        body: JSON.stringify({ vehicleIds: chunk }),
+      })) as { data?: Record<string, DynamicVehicle> };
+      const data = json?.data;
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        for (const [vid, d] of Object.entries(data)) out.set(Number(vid), d);
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(DYNAMIC_CONCURRENCY, chunks.length) }, worker));
+  return out;
+}
+
+/**
+ * Live telemetry for WheelsEye vehicles, keyed by normalized registration (UPPER,
+ * no spaces/dashes) for joining to VMS vehicles. Returns speed, today's km, address,
+ * ignition and position — the same figures the WheelsEye dashboard shows. Vehicles
+ * with no live telemetry are omitted.
+ *
+ * Pass `regs` to fetch only the vehicles the caller can actually see (the /live page
+ * passes its permission-filtered set): we then hit `vehicles-dynamic` for just those
+ * ids instead of the whole account. Omit it to cover every vehicle on the account.
+ * Telemetry is served from a short per-id cache, so only stale/missing ids are fetched.
+ */
+export async function getWheelsEyeLiveState(
+  regs?: Iterable<string> | null,
+): Promise<Map<string, WheelsEyeLiveState>> {
+  const idToReg = await fetchStaticFleet();
+  if (!idToReg.size) return new Map();
+
+  // Resolve which ids we need: the caller's visible regs, or the whole account.
+  let neededIds: number[];
+  if (regs) {
+    const want = new Set<string>();
+    for (const r of Array.from(regs)) want.add(normReg(r));
+    neededIds = [];
+    for (const [id, reg] of Array.from(idToReg)) if (want.has(normReg(reg))) neededIds.push(id);
+  } else {
+    neededIds = Array.from(idToReg.keys());
+  }
+  if (!neededIds.length) return new Map();
+
+  // Only fetch ids whose cached telemetry is missing or past its TTL.
+  const now = Date.now();
+  const stale = neededIds.filter((id) => {
+    const e = dynamicCache.get(id);
+    return !e || now - e.at >= DYNAMIC_TTL_MS;
+  });
+
+  if (stale.length) {
+    let fetched = await fetchDynamic(stale);
+    // An empty result usually means the token was silently rejected (HTTP 200 +
+    // empty data, not a 401) — but a small scoped batch can also just be offline.
+    // Only force a re-login when there's no recent proof the token works.
+    if (fetched.size === 0 && Date.now() - dynamicOkAt >= DYNAMIC_TRUST_MS) {
+      cachedToken = null;
+      staticCache = null;
+      await getToken(true);
+      fetched = await fetchDynamic(stale);
+    }
+    if (fetched.size > 0) dynamicOkAt = Date.now();
+    const at = Date.now();
+    for (const [id, d] of Array.from(fetched)) dynamicCache.set(id, { at, data: d });
+  }
+
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const map = new Map<string, WheelsEyeLiveState>();
+  for (const id of neededIds) {
+    const reg = idToReg.get(id);
+    const entry = dynamicCache.get(id);
+    if (!reg || !entry) continue;
+    const d = entry.data;
+    const speed = fin(d.speed);
+    const km = fin(d.sanitizedDistance);
+    const t = fin(d.time);
+    map.set(normReg(reg), {
+      vehicleId: id,
+      registration: reg,
+      status: deriveStatus(d.mode, d.ignitionState),
+      speedKmh: speed == null ? null : Math.round(speed),
+      latitude: fin(d.latitude),
+      longitude: fin(d.longitude),
+      address: typeof d.addr === "string" && d.addr.trim() ? d.addr.trim() : null,
+      ignition: d.ignitionState ? String(d.ignitionState).toUpperCase() === "ON" : null,
+      blocked: typeof d.parkLockActive === "boolean" ? d.parkLockActive : null,
+      course: fin(d.angle),
+      todayDistanceKm: km == null ? null : round1(km),
+      lastUpdate: t == null ? null : new Date(t * 1000).toISOString(),
+    });
   }
   return map;
 }
