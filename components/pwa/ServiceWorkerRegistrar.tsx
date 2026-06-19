@@ -15,8 +15,26 @@ export function ServiceWorkerRegistrar() {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
+
+    // In dev, proactively tear down any service worker installed by a prior
+    // production run on this origin. Its cache-first /_next/static/ strategy
+    // serves stale chunks to the dev server's fresh HTML, which breaks
+    // hydration (forms then fall back to native GET submits). The early return
+    // alone isn't enough — an already-installed worker keeps controlling the page.
+    if (process.env.NODE_ENV !== "production") {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        .catch(() => {});
+      if ("caches" in window) {
+        caches
+          .keys()
+          .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+          .catch(() => {});
+      }
+      return;
+    }
 
     let reg: ServiceWorkerRegistration | undefined;
 

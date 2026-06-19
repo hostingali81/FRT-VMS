@@ -1,15 +1,17 @@
 // Server-only module: joins live GPS feeds (Millitrack + WheelsEye) to the
 // permission-filtered VMS vehicles. Imported by the /live page and its refresh action.
 import { getVehicles } from "@/lib/data";
-import { getFleetLiveState, isMillitrackConfigured } from "@/lib/millitrack";
-import { getWheelsEyeLiveState, isWheelsEyeConfigured } from "@/lib/wheelseye";
+import { getFleetLiveState, isMillitrackConfigured, type LiveDeviceState } from "@/lib/millitrack";
+import { getWheelsEyeLiveState, isWheelsEyeConfigured, type WheelsEyeLiveState } from "@/lib/wheelseye";
 import type {
   FleetLiveCounts,
   FleetLiveStatus,
   FleetVehicle,
+  LiveProvider,
   LiveStatus,
   LiveVehicleStatus,
   UserProfile,
+  VehicleLive,
 } from "@/lib/types";
 
 const emptyCounts = (): FleetLiveCounts => ({
@@ -46,6 +48,56 @@ function baseFields(v: FleetVehicle) {
     circle: v.current_circle ?? v.home_circle,
     division: v.division,
     substation: v.substation,
+  };
+}
+
+// Mirrors VehicleLiveCard's fallback title: "<frt> <substation> (<registration>)".
+function vehicleTitle(v: FleetVehicle): string {
+  const prefix = [v.frt_no, v.substation].filter(Boolean).join(" ").trim();
+  return prefix ? `${prefix} (${v.registration_no})` : v.registration_no;
+}
+
+// Normalise one provider device record into the unified LiveVehicleStatus shape.
+// Shared by the fleet snapshot and the single-vehicle lookup so the two never drift.
+function mtItem(v: FleetVehicle, dev: LiveDeviceState): LiveVehicleStatus {
+  return {
+    ...baseFields(v),
+    provider: "VehicleStep",
+    device_id: dev.deviceId,
+    device_name: dev.name,
+    category: dev.category,
+    live_status: dev.status,
+    speed_kmh: dev.speedKmh,
+    latitude: dev.latitude,
+    longitude: dev.longitude,
+    address: dev.address,
+    ignition: dev.ignition,
+    charge: dev.charge,
+    blocked: dev.blocked,
+    today_distance_km: dev.todayDistanceKm,
+    course: dev.course,
+    last_update: dev.lastUpdate,
+  };
+}
+
+function weItem(v: FleetVehicle, dev: WheelsEyeLiveState): LiveVehicleStatus {
+  return {
+    ...baseFields(v),
+    provider: "WheelsEye",
+    device_id: dev.vehicleId,
+    device_name: null,
+    category: null, // WheelsEye has no device category; markers fall back to truck
+    live_status: dev.status,
+    speed_kmh: dev.speedKmh,
+    latitude: dev.latitude,
+    longitude: dev.longitude,
+    address: dev.address,
+    ignition: dev.ignition,
+    charge: null,
+    blocked: dev.blocked,
+    today_distance_km: dev.todayDistanceKm,
+    course: dev.course,
+    last_update: dev.lastUpdate,
   };
 }
 
@@ -96,23 +148,7 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
     }
     counts[dev.status] += 1;
     counts.total += 1;
-    items.push({
-      ...baseFields(v),
-      provider: "VehicleStep",
-      device_id: dev.deviceId,
-      device_name: dev.name,
-      live_status: dev.status,
-      speed_kmh: dev.speedKmh,
-      latitude: dev.latitude,
-      longitude: dev.longitude,
-      address: dev.address,
-      ignition: dev.ignition,
-      charge: dev.charge,
-      blocked: dev.blocked,
-      today_distance_km: dev.todayDistanceKm,
-      course: dev.course,
-      last_update: dev.lastUpdate,
-    });
+    items.push(mtItem(v, dev));
   }
 
   // ── WheelsEye (join by registration) ──
@@ -124,23 +160,7 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
     }
     counts[dev.status] += 1;
     counts.total += 1;
-    items.push({
-      ...baseFields(v),
-      provider: "WheelsEye",
-      device_id: dev.vehicleId,
-      device_name: null,
-      live_status: dev.status,
-      speed_kmh: dev.speedKmh,
-      latitude: dev.latitude,
-      longitude: dev.longitude,
-      address: dev.address,
-      ignition: dev.ignition,
-      charge: null,
-      blocked: dev.blocked,
-      today_distance_km: dev.todayDistanceKm,
-      course: dev.course,
-      last_update: dev.lastUpdate,
-    });
+    items.push(weItem(v, dev));
   }
 
   items.sort((a, b) => {
@@ -162,4 +182,70 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
     untracked,
     fetchedAt,
   };
+}
+
+/**
+ * Current/last live position for ONE of the caller's vehicles — backs the
+ * default view of /live/[vehicleId] (shown before any route is requested).
+ * Permission-scoped via getVehicles. Hits only the provider this vehicle uses:
+ * Millitrack's fleet state (one bulk call) or a single-registration WheelsEye
+ * lookup. `live: null` means the vehicle is mapped but isn't reporting right now.
+ */
+export async function getVehicleLiveStatus(
+  profile: UserProfile | null | undefined,
+  vehicleId: string,
+): Promise<VehicleLive> {
+  const fetchedAt = new Date().toISOString();
+  const mtConfigured = isMillitrackConfigured();
+  const weConfigured = isWheelsEyeConfigured();
+  const configured = mtConfigured || weConfigured;
+
+  const vehicles = await getVehicles(profile);
+  const v = vehicles.find((x) => x.vehicle_id === vehicleId);
+
+  if (!v) {
+    return {
+      ok: false,
+      configured,
+      error: "Vehicle not found or you don't have access to it.",
+      vehicle: { vehicle_id: vehicleId, registration_no: "", frt_no: null, substation: null, title: "Vehicle", provider: null },
+      live: null,
+      fetchedAt,
+    };
+  }
+
+  const provider: LiveProvider | null =
+    v.gps_company === "WheelsEye" ? "WheelsEye" : isMtVehicle(v) ? "VehicleStep" : null;
+  const meta = {
+    vehicle_id: v.vehicle_id,
+    registration_no: v.registration_no,
+    frt_no: v.frt_no,
+    substation: v.substation,
+    title: vehicleTitle(v),
+    provider,
+  };
+
+  try {
+    if (v.gps_company === "WheelsEye") {
+      if (!weConfigured) throw new Error("WheelsEye GPS is not configured.");
+      const state = await getWheelsEyeLiveState([v.registration_no]);
+      const dev = state.get(normReg(v.registration_no));
+      return { ok: true, configured, vehicle: meta, live: dev ? weItem(v, dev) : null, fetchedAt };
+    }
+
+    if (!isMtVehicle(v)) throw new Error("This vehicle has no GPS device mapped.");
+    if (!mtConfigured) throw new Error("Millitrack GPS is not configured.");
+    const state = await getFleetLiveState();
+    const dev = state.byDeviceId.get(Number(v.gps_device_id));
+    return { ok: true, configured, vehicle: meta, live: dev ? mtItem(v, dev) : null, fetchedAt };
+  } catch (e) {
+    return {
+      ok: false,
+      configured,
+      error: e instanceof Error ? e.message : "Couldn't load live location.",
+      vehicle: meta,
+      live: null,
+      fetchedAt,
+    };
+  }
 }

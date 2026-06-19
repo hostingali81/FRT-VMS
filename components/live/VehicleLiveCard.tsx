@@ -35,7 +35,7 @@ export function VehicleLiveCard({ vehicle }: { vehicle: LiveVehicleStatus }) {
 
   return (
     <Link
-      href={`/vehicles/${vehicle.vehicle_id}`}
+      href={`/live/${vehicle.vehicle_id}`}
       className="group flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99]"
     >
       {/* Colour-coded status edge */}

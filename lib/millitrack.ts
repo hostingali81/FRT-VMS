@@ -26,7 +26,7 @@
  * web dashboard (mvts4.millitrack.com).
  */
 
-import type { LiveStatus } from "@/lib/types";
+import type { LiveStatus, ProviderRoute } from "@/lib/types";
 
 const BASE = process.env.MT_BASE_URL ?? "http://track4.millitrack.com";
 const APP_ID = "in.vehiclestep.vehiclesteppro.gpstracker";
@@ -210,6 +210,94 @@ export async function millitrackSummary(
   return rows.map(normalizeSummary);
 }
 
+// ── Route history (replay) ───────────────────────────────────────────────────
+// The mvts4 web player and the Android app both read /api/reports/routeWithStops,
+// which returns the travelled path (onlyMovingPositionList), the parked segments
+// (stopDataList) and the total distance — exactly what the replay map needs.
+
+type RawPosition = {
+  latitude?: number;
+  longitude?: number;
+  speed?: number; // knots
+  course?: number;
+  fixTime?: string;
+  deviceTime?: string;
+  address?: string;
+};
+type RawStop = {
+  stopPosition?: RawPosition;
+  startPosition?: RawPosition;
+  stopDuration?: number; // ms
+};
+type RawRouteWithStops = {
+  onlyMovingPositionList?: RawPosition[];
+  stopDataList?: RawStop[];
+  totalDistanceTravelled?: number; // metres
+};
+
+const posTime = (p: RawPosition | undefined) =>
+  (p ? rsStr(p.fixTime) ?? rsStr(p.deviceTime) : null);
+
+// Local null-coercing helpers (the `num`/`str` consts below aren't initialized
+// until module eval reaches them; these are hoisted so route code is order-safe).
+function rsNum(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+function rsStr(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+/**
+ * Travelled route + stops for a device over [fromISO, toISO].
+ * Speeds are converted knots → km/h; distance metres → km.
+ */
+export async function millitrackRoute(
+  deviceId: string | number,
+  fromISO: string,
+  toISO: string,
+): Promise<ProviderRoute> {
+  const params = new URLSearchParams({ from: fromISO, to: toISO, mail: "false" });
+  params.append("deviceId", String(deviceId));
+  params.set("dc", String(Date.now())); // cache buster
+
+  const res = await authedFetch(`/api/reports/routeWithStops?${params.toString()}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Millitrack route failed for device ${deviceId} (${res.status}): ${body.slice(0, 160)}`);
+  }
+  const data = (await res.json()) as RawRouteWithStops;
+
+  const points = (data.onlyMovingPositionList ?? []).flatMap((p) => {
+    const lat = rsNum(p.latitude);
+    const lng = rsNum(p.longitude);
+    if (lat == null || lng == null) return [];
+    return [{
+      lat,
+      lng,
+      speedKmh: Math.round((rsNum(p.speed) ?? 0) * KNOTS_TO_KMH),
+      course: rsNum(p.course),
+      time: posTime(p),
+    }];
+  });
+
+  const stops = (data.stopDataList ?? []).flatMap((s) => {
+    const sp = s.stopPosition ?? {};
+    const lat = rsNum(sp.latitude);
+    const lng = rsNum(sp.longitude);
+    if (lat == null || lng == null) return [];
+    return [{
+      lat,
+      lng,
+      address: rsStr(sp.address),
+      arrivedAt: posTime(sp),
+      departedAt: posTime(s.startPosition),
+      durationMs: rsNum(s.stopDuration) ?? 0,
+    }];
+  });
+
+  return { points, stops, totalDistanceKm: +(((rsNum(data.totalDistanceTravelled) ?? 0) / 1000).toFixed(1)) };
+}
+
 // ── Live fleet state (userDevicesState) ──────────────────────────────────────
 // One call returns every device's current position/status plus the status-bucket
 // counts. Powers the /live tracking page.
@@ -219,6 +307,7 @@ export type LiveDeviceState = {
   deviceId: number;
   name: string | null;
   uniqueId: string | null;
+  category: string | null; // Traccar device category (truck/motorcycle/pickup…) → marker icon
   status: LiveStatus;
   speedKmh: number;
   latitude: number | null;
@@ -307,6 +396,7 @@ function normalizeFleetState(data: RawFleetState): FleetLiveState {
       deviceId: id,
       name: str(device.name),
       uniqueId: str(device.uniqueId),
+      category: str(device.category),
       status: statusById.get(id) ?? statusFromCurrent(attr.currentStatus),
       speedKmh: Math.round((num(position.speed) ?? 0) * KNOTS_TO_KMH),
       latitude: num(position.latitude),

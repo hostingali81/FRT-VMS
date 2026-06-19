@@ -22,7 +22,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { LiveStatus } from "@/lib/types";
+import type { LiveStatus, ProviderRoute } from "@/lib/types";
 
 const BASE = process.env.WHEELSEYE_BASE_URL ?? "https://wheelseye.com";
 const WE_APP_VERSION = "18.4.0";
@@ -156,6 +156,152 @@ export async function wheelsEyeDistanceByReg(fromSec: number, toSec: number): Pr
     map.set(normReg(String(r[0])), parseFloat(String(r[3])) || 0);
   }
   return map;
+}
+
+// ── Route history (replay) ───────────────────────────────────────────────────
+// The travelled path comes from /vehicle/getPathDetail as an encoded
+// `followedPolyLine`; the parked segments come from /vehicle/getItinerary
+// (STOPPAGE itineraries). Both are keyed by the static vehicleId.
+
+const MAX_ROUTE_POINTS = 600;
+
+type DecodedPoint = { latitude: number; longitude: number; time: number; speed: number };
+
+/**
+ * WheelsEye's followedPolyLine encodes a quadruple per point: latitude, longitude,
+ * time and speed — each a delta-encoded varint accumulated from the previous point.
+ * lat/lng/speed use the standard polyline varint; time uses a BigInt variant. This
+ * mirrors WheelsEye's own dashboard decoder exactly (speed comes out as km/h, time
+ * as Unix seconds).
+ */
+function decodeWheelsEyePolyline(encoded: unknown): DecodedPoint[] {
+  if (typeof encoded !== "string" || !encoded) return [];
+  const points: DecodedPoint[] = [];
+  const length = encoded.length;
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  let time = BigInt(0);
+  let speed = 0;
+
+  while (index < length) {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 31) << shift;
+      shift += 5;
+    } while (byte >= 32);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 31) << shift;
+      shift += 5;
+    } while (byte >= 32);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    let timeShift = BigInt(0);
+    let timeAcc = BigInt(1);
+    let timeByte: bigint;
+    do {
+      timeByte = BigInt(encoded.charCodeAt(index++) - 64);
+      timeAcc += timeByte << timeShift;
+      timeShift += BigInt(5);
+    } while (timeByte >= BigInt(31));
+    time += timeAcc & BigInt(1) ? ~(timeAcc >> BigInt(1)) : timeAcc >> BigInt(1);
+
+    result = 0;
+    shift = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 31) << shift;
+      shift += 5;
+    } while (byte >= 32);
+    speed += result & 1 ? ~(result >> 1) : result >> 1;
+
+    points.push({ latitude: lat / 1e5, longitude: lng / 1e5, time: Number(time), speed: Math.max(0, speed) });
+  }
+  return points;
+}
+
+/** Downsample a dense trail so the replay isn't choked with thousands of points. */
+function thinRoutePoints<T>(points: T[], maxPoints: number): T[] {
+  if (points.length <= maxPoints) return points;
+  const step = Math.ceil(points.length / maxPoints);
+  const out: T[] = [];
+  for (let i = 0; i < points.length; i += step) out.push(points[i]);
+  const last = points[points.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
+
+/** Itinerary distance (km): top-level total, then running total, then sum of driving legs. */
+function itineraryDistanceKm(itin: Record<string, unknown>, segments: Array<Record<string, unknown>>): number {
+  const top = fin(itin.totalDistance);
+  if (top && top > 0) return top;
+  const running = fin(itin.totalRunningDistanceKM);
+  if (running && running > 0) return running;
+  const drivingMeters = segments
+    .filter((s) => String(s.mode ?? "").toUpperCase() === "DRIVING")
+    .reduce((sum, s) => sum + (fin(s.totalDistance) ?? 0), 0);
+  return drivingMeters / 1000;
+}
+
+/** Resolve the static vehicleId for a registration (the key getPathDetail expects). */
+export async function wheelsEyeVehicleIdForReg(reg: string): Promise<number | null> {
+  const idToReg = await fetchStaticFleet();
+  const target = normReg(reg);
+  for (const [id, r] of Array.from(idToReg)) if (normReg(r) === target) return id;
+  return null;
+}
+
+/** Travelled route + stops for a WheelsEye vehicle over [fromSec, toSec] (Unix seconds). */
+export async function wheelsEyeRoute(vehicleId: number, fromSec: number, toSec: number): Promise<ProviderRoute> {
+  const [pathJson, itinJson] = await Promise.all([
+    weRequest(`/vehicle/getPathDetail?vehicleId=${vehicleId}&fromTime=${fromSec}&toTime=${toSec}`),
+    // The itinerary (stops) is best-effort: a failure there shouldn't drop the path.
+    weRequest(`/vehicle/getItinerary?vehicleId=${vehicleId}&fromTime=${fromSec}&toTime=${toSec}&showGeofenceData=true`).catch(
+      () => null,
+    ),
+  ]);
+
+  const pathData = (pathJson as { data?: { followedPolyLine?: string } })?.data ?? {};
+  const decoded = thinRoutePoints(decodeWheelsEyePolyline(pathData.followedPolyLine), MAX_ROUTE_POINTS);
+  const points = decoded.map((p) => ({
+    lat: p.latitude,
+    lng: p.longitude,
+    speedKmh: Math.max(0, Math.round(p.speed)),
+    course: null, // bearing is derived client-side from consecutive points
+    time: Number.isFinite(p.time) ? new Date(p.time * 1000).toISOString() : null,
+  }));
+
+  const itin = (itinJson as { data?: Record<string, unknown> })?.data ?? {};
+  const segments = (Array.isArray(itin.itineraries) ? itin.itineraries : []) as Array<Record<string, unknown>>;
+  const stops = segments
+    .filter((s) => String(s.mode ?? "").toUpperCase() === "STOPPAGE")
+    .flatMap((s) => {
+      const lat = fin(s.fromLat);
+      const lng = fin(s.fromLng);
+      if (lat == null || lng == null) return [];
+      const fromT = fin(s.fromTime);
+      const toT = fin(s.toTime);
+      const loc = typeof s.fromLocName === "string" && s.fromLocName.trim() ? s.fromLocName.trim() : null;
+      return [{
+        lat,
+        lng,
+        address: loc,
+        arrivedAt: fromT != null ? new Date(fromT * 1000).toISOString() : null,
+        departedAt: toT != null ? new Date(toT * 1000).toISOString() : null,
+        durationMs: (fin(s.totalTime) ?? 0) * 1000,
+      }];
+    });
+
+  return { points, stops, totalDistanceKm: +itineraryDistanceKm(itin, segments).toFixed(1) };
 }
 
 // ── Live status/location/telemetry (vehicles-dynamic) ────────────────────────

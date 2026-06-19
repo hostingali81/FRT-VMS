@@ -311,6 +311,7 @@ export type LiveVehicleStatus = {
   provider: LiveProvider;
   device_id: number;
   device_name: string | null;
+  category: string | null; // vehicle type (truck/motorcycle/pickup…) → marker icon
   live_status: LiveStatus;
   speed_kmh: number | null;
   latitude: number | null;
@@ -333,4 +334,70 @@ export type FleetLiveStatus = {
   vehicles: LiveVehicleStatus[];
   untracked: number; // visible GPS-mapped vehicles missing from the live feed
   fetchedAt: string; // ISO instant the snapshot was taken
+};
+
+/**
+ * Current/last live position for a single vehicle — backs the default view of
+ * the /live/[vehicleId] page (shown before any route history is requested).
+ * `live` is null when the vehicle is mapped but not reporting right now.
+ */
+export type VehicleLive = {
+  ok: boolean; // live lookup succeeded (vehicle accessible + provider reachable)
+  error?: string;
+  configured: boolean; // GPS provider credentials present
+  vehicle: {
+    vehicle_id: string;
+    registration_no: string;
+    frt_no: string | null;
+    substation: string | null;
+    title: string;
+    provider: LiveProvider | null;
+  };
+  live: LiveVehicleStatus | null;
+  fetchedAt: string; // ISO instant the snapshot was taken
+};
+
+// ── Route history (replay) ───────────────────────────────────────────────────
+// One sampled GPS fix along the travelled path. `time`/`course` may be null when
+// the provider doesn't carry them per-point (WheelsEye's bearing is derived
+// client-side from consecutive points).
+export type RouteTrackPoint = {
+  lat: number;
+  lng: number;
+  speedKmh: number;
+  course: number | null;
+  time: string | null; // ISO
+};
+
+/** A place the vehicle was parked/stopped during the window. */
+export type RouteStop = {
+  lat: number;
+  lng: number;
+  address: string | null;
+  arrivedAt: string | null; // ISO — when it stopped
+  departedAt: string | null; // ISO — when it moved off
+  durationMs: number;
+};
+
+/** Provider-normalized route payload (before VMS metadata is attached). */
+export type ProviderRoute = {
+  points: RouteTrackPoint[];
+  stops: RouteStop[];
+  totalDistanceKm: number;
+};
+
+/** Full route-history response for the /live/[vehicleId] replay map. */
+export type VehicleRoute = ProviderRoute & {
+  ok: boolean;
+  error?: string;
+  provider: LiveProvider | null;
+  vehicle: {
+    vehicle_id: string;
+    registration_no: string;
+    frt_no: string | null;
+    substation: string | null;
+    title: string;
+  };
+  fromISO: string;
+  toISO: string;
 };
