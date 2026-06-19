@@ -181,7 +181,15 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
 
     infoRef.current = new maps.InfoWindow();
     route.stops.forEach((s, i) => {
-      const m = new maps.Marker({ position: { lat: s.lat, lng: s.lng }, map, icon: dot("#f59e0b", 6), title: `Stop ${i + 1}`, zIndex: 4 });
+      const m = new maps.Marker({
+        position: { lat: s.lat, lng: s.lng },
+        map,
+        icon: dot("#f59e0b", 11),
+        // Number each stop in the order it happened, so the map matches the replay sequence.
+        label: { text: String(i + 1), color: "#451a03", fontSize: "11px", fontWeight: "700" },
+        title: `Stop ${i + 1}`,
+        zIndex: 4,
+      });
       m.addListener("click", () => {
         const mins = s.durationMs ? Math.round(s.durationMs / 60000) : 0;
         const dur = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
