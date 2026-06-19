@@ -1,14 +1,14 @@
 "use client";
 
-import { AlertTriangle, Send } from "lucide-react";
+import { AlertTriangle, Send, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/form";
-import type { FleetVehicle, LookupData } from "@/lib/types";
-import { formatDate } from "@/lib/utils/format";
+import type { DriverAssignment, FleetVehicle, LookupData } from "@/lib/types";
+import { formatDate, titleCase } from "@/lib/utils/format";
 import { istToday } from "@/lib/utils/month";
 
 // Reason values are stored as-is in transfer history, so keep them stable.
@@ -32,14 +32,17 @@ const CROSS_CIRCLE_REASONS = [
 export function TransferForm({
   vehicle,
   lookups,
+  currentDrivers = [],
   action,
   cancelHref,
 }: {
   vehicle: FleetVehicle;
   lookups: LookupData;
+  currentDrivers?: DriverAssignment[];
   action: (formData: FormData) => Promise<void>;
   cancelHref?: string;
 }) {
+  const [moveDriver, setMoveDriver] = useState(false);
   const [circleId, setCircleId] = useState(vehicle.current_circle_id ?? lookups.circles[0]?.id ?? "");
   const [divisionId, setDivisionId] = useState(vehicle.division_id ?? "");
 
@@ -151,6 +154,42 @@ export function TransferForm({
             <Field label="Remarks">
               <Textarea name="remarks" />
             </Field>
+          </div>
+          <div className="md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <Users className="h-4 w-4" aria-hidden="true" />
+              Drivers on this vehicle
+            </div>
+            {currentDrivers.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                {currentDrivers.map((driver) => (
+                  <li key={driver.id}>
+                    {driver.driver_name} — <span className="text-slate-500">{titleCase(driver.shift)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm italic text-slate-400">No drivers currently assigned.</p>
+            )}
+            {currentDrivers.length > 0 ? (
+              <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="move_driver"
+                  checked={moveDriver}
+                  onChange={(event) => setMoveDriver(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                />
+                <span>
+                  Move driver(s) with the vehicle
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {moveDriver
+                      ? "Driver(s) will be re-posted to the new substation and keep driving this vehicle."
+                      : `Driver(s) will stay posted at ${vehicle.substation ?? "their current substation"} and become available for the next vehicle there.`}
+                  </span>
+                </span>
+              </label>
+            ) : null}
           </div>
           <div className="grid gap-3 md:col-span-2 md:flex md:flex-wrap md:items-center md:justify-between">
             {isCrossCircle ? <Badge tone="indigo">Cross-circle</Badge> : <Badge tone="blue">Same circle</Badge>}

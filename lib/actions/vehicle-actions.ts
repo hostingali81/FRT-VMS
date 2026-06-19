@@ -167,6 +167,7 @@ export async function transferVehicleAction(formData: FormData) {
     p_reason: data.reason,
     p_approved_by: data.approved_by,
     p_remarks: data.remarks,
+    p_move_driver: data.move_driver,
   });
 
   if (error) throw new Error("Transfer failed: " + error.message);
@@ -383,8 +384,8 @@ export async function createDriverAction(formData: FormData) {
   }
 
   const data = validated.data;
-  if (!canAccessLocation(profile, { circleId: data.circle_id }, lookups)) {
-    throw new Error("Unauthorized access to this circle");
+  if (!canAccessLocation(profile, { circleId: data.circle_id, divisionId: data.division_id }, lookups)) {
+    throw new Error("Unauthorized access to this location");
   }
 
   const supabase = requireAdminClient();

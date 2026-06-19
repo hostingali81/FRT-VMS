@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Save, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DashedButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,17 @@ export function DriverForm({
   action: (formData: FormData) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [circleId, setCircleId] = useState(lookups.circles[0]?.id ?? "");
+  const [divisionId, setDivisionId] = useState("");
+
+  const divisions = useMemo(
+    () => lookups.divisions.filter((division) => division.circle_id === circleId),
+    [circleId, lookups.divisions],
+  );
+  const substations = useMemo(
+    () => lookups.substations.filter((substation) => substation.division_id === divisionId),
+    [divisionId, lookups.substations],
+  );
 
   if (!open) {
     return (
@@ -56,10 +67,38 @@ export function DriverForm({
             <Input name="license_expiry" type="date" />
           </Field>
           <Field label="Circle">
-            <Select name="circle_id" required>
+            <Select
+              name="circle_id"
+              value={circleId}
+              onChange={(event) => {
+                setCircleId(event.target.value);
+                setDivisionId("");
+              }}
+              required
+            >
               {lookups.circles.map((circle) => (
                 <option key={circle.id} value={circle.id}>
                   {circle.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Division">
+            <Select name="division_id" value={divisionId} onChange={(event) => setDivisionId(event.target.value)} required>
+              <option value="">Select division</option>
+              {divisions.map((division) => (
+                <option key={division.id} value={division.id}>
+                  {division.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Substation">
+            <Select name="substation_id" disabled={!divisionId} required>
+              <option value="">Select substation</option>
+              {substations.map((substation) => (
+                <option key={substation.id} value={substation.id}>
+                  {substation.name}
                 </option>
               ))}
             </Select>

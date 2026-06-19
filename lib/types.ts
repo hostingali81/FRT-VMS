@@ -173,6 +173,10 @@ export type DriverRecord = {
   status: "active" | "inactive";
   circle_id: string;
   circle: string;
+  division_id: string | null;
+  division: string | null;
+  substation_id: string | null;
+  substation: string | null;
   vehicle_id: string | null;
   registration_no: string | null;
   shift: DriverShift | null;

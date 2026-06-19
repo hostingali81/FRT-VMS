@@ -26,6 +26,8 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
                 License: driver.license_no,
                 Expiry: driver.license_expiry,
                 Circle: driver.circle,
+                Division: driver.division,
+                Substation: driver.substation,
                 Vehicle: driver.registration_no,
                 Shift: driver.shift,
                 Status: driver.status,
@@ -38,7 +40,7 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
         </Button>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[900px] w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1080px] w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-3">Name</th>
@@ -46,6 +48,8 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
               <th className="px-5 py-3">License</th>
               <th className="px-5 py-3">Expiry</th>
               <th className="px-5 py-3">Circle</th>
+              <th className="px-5 py-3">Division</th>
+              <th className="px-5 py-3">Substation</th>
               <th className="px-5 py-3">Assigned Vehicle</th>
               <th className="px-5 py-3">Status</th>
             </tr>
@@ -60,6 +64,8 @@ export function DriverTable({ drivers }: { drivers: DriverRecord[] }) {
                   <ExpiryBadge date={driver.license_expiry} />
                 </td>
                 <td data-label="Circle" className="px-5 py-4 text-slate-600">{driver.circle}</td>
+                <td data-label="Division" className="px-5 py-4 text-slate-600">{driver.division ?? "—"}</td>
+                <td data-label="Substation" className="px-5 py-4 text-slate-600">{driver.substation ?? "Unposted"}</td>
                 <td data-label="Assigned Vehicle" className="px-5 py-4 text-slate-600">
                   {driver.registration_no ? `${driver.registration_no} (${titleCase(driver.shift)}) since ${formatDate(driver.assigned_from)}` : "Unassigned"}
                 </td>

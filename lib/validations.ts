@@ -49,6 +49,11 @@ export const transferSchema = z.object({
   reason: z.string().min(1, "Reason is required"),
   approved_by: z.string().min(1, "Approver name is required"),
   remarks: z.string().optional().nullable(),
+  // Checkbox: unchecked → field absent → false. Only when explicitly checked
+  // does the driver follow the vehicle to the new substation.
+  move_driver: z
+    .preprocess((v) => v === "on" || v === "true" || v === true, z.boolean())
+    .default(false),
 });
 
 export const statusSchema = z.object({
@@ -65,6 +70,8 @@ export const driverSchema = z.object({
   license_expiry: optionalDate,
   address: optionalText,
   circle_id: z.string().uuid("Invalid circle"),
+  division_id: z.string().uuid("Invalid division"),
+  substation_id: z.string().uuid("Invalid substation"),
   status: z.enum(['active', 'inactive']).default('active'),
 });
 

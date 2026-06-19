@@ -86,9 +86,18 @@ export function VehicleProfileTabs({
   const [showFuelForm, setShowFuelForm] = useState(false);
 
   const currentDrivers = useMemo(() => drivers.filter((d) => !d.to_date), [drivers]);
+  // Drivers are posted to a substation; the natural candidates for this vehicle
+  // are the active drivers posted at its substation (incl. ones freed when a
+  // previous vehicle was transferred away). If the vehicle has no substation yet,
+  // fall back to every active driver in scope.
   const activeAvailableDrivers = useMemo(
-    () => availableDrivers.filter((d) => d.status === "active"),
-    [availableDrivers],
+    () =>
+      availableDrivers.filter(
+        (d) =>
+          d.status === "active" &&
+          (!vehicle.substation_id || d.substation_id === vehicle.substation_id),
+      ),
+    [availableDrivers, vehicle.substation_id],
   );
 
   const today = istToday();
