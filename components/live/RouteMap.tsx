@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, LocateFixed, Pause, Play, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadGoogleMaps, MAPS_API_KEY } from "@/lib/maps/loader";
@@ -10,8 +10,20 @@ import { cn } from "@/lib/utils/cn";
 
 const API_KEY = MAPS_API_KEY;
 
-const SPEEDS = [1, 2, 4, 8] as const;
-const BASE_POINTS_PER_SEC = 12; // playback rate at 1x
+const SPEEDS = [1, 2, 4, 8, 16] as const;
+
+// Playback is time-based, not index-based: the marker advances along the path at
+// the rate the vehicle actually travelled (from each point's timestamp), compressed
+// by REPLAY_SPEED_SCALE at 1x. This makes the replay speed identical and smooth
+// across providers (WheelsEye vs VehicleStep) no matter how densely or evenly each
+// one samples its points. The old "12 points/sec" walk made a sparsely-sampled
+// trail lurch and fly while a dense one crawled.
+const REPLAY_SPEED_SCALE = 60; // 1x ≈ 60× real time (≈ 1 replay-second per travelled minute)
+const SEG_MIN_MS = 60; // floor per segment so dense sampling isn't effectively instant
+const SEG_MAX_MS = 3000; // cap per segment so a long GPS gap doesn't stall the playback
+const MAX_REAL_GAP_MS = 10 * 60_000; // bigger time gaps are treated as bogus → distance fallback
+const NOMINAL_KMH = 30; // assumed speed for the distance fallback when timestamps are unusable
+const MAX_FRAME_MS = 250; // clamp per-frame dt (e.g. after a backgrounded tab) to avoid a jump
 
 function timeLabel(iso: string | null): string {
   if (!iso) return "";
@@ -23,6 +35,66 @@ function timeLabel(iso: string | null): string {
     hour12: true,
     timeZone: "Asia/Kolkata",
   }).format(new Date(iso));
+}
+
+/** Great-circle metres between two lat/lng points (no Maps dependency needed). */
+function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/**
+ * Playback duration (ms) for each segment i→i+1, derived from the real time the
+ * vehicle took between the two fixes and compressed by REPLAY_SPEED_SCALE. When a
+ * timestamp is missing or the gap is implausible, fall back to distance ÷ a nominal
+ * speed so motion stays proportional to ground covered. Each segment is clamped to
+ * [SEG_MIN_MS, SEG_MAX_MS] so dense sampling isn't instant and a long GPS gap can't
+ * stall the play.
+ */
+function buildSegmentDurations(points: VehicleRoute["points"]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const ta = a.time ? Date.parse(a.time) : NaN;
+    const tb = b.time ? Date.parse(b.time) : NaN;
+    let realMs = tb - ta;
+    if (!Number.isFinite(realMs) || realMs <= 0 || realMs > MAX_REAL_GAP_MS) {
+      realMs = (haversineMeters(a, b) / (NOMINAL_KMH / 3.6)) * 1000;
+    }
+    out.push(Math.min(SEG_MAX_MS, Math.max(SEG_MIN_MS, realMs / REPLAY_SPEED_SCALE)));
+  }
+  return out;
+}
+
+/**
+ * Advance a fractional point index by `addMs` of playback time, consuming whole
+ * segments as needed (so several tiny segments can pass in one frame, and a long
+ * one is crossed gradually). Returns the new fractional index, capped at the end.
+ */
+function advanceProgress(progress: number, addMs: number, segDur: number[]): number {
+  const n = segDur.length; // n segments → n + 1 points
+  if (n === 0) return progress;
+  let i = Math.min(Math.floor(progress), n - 1);
+  let frac = progress - i;
+  let remaining = addMs;
+  while (remaining > 0 && i < n) {
+    const segMs = segDur[i] || SEG_MIN_MS;
+    const msLeftInSeg = (1 - frac) * segMs;
+    if (remaining < msLeftInSeg) {
+      frac += remaining / segMs;
+      remaining = 0;
+    } else {
+      remaining -= msLeftInSeg;
+      i += 1;
+      frac = 0;
+    }
+  }
+  return Math.min(i + frac, n);
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the Google Maps JS API has no bundled types here. */
@@ -38,6 +110,7 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
   const progressRef = useRef(0); // continuous index into route.points
   const rafRef = useRef<number | null>(null);
   const ptsRef = useRef(route.points);
+  const segDurRef = useRef<number[]>([]); // per-segment playback durations (ms), time-derived
 
   const [ready, setReady] = useState(false);
   const [iconTick, setIconTick] = useState(0);
@@ -47,6 +120,9 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
   const [idx, setIdx] = useState(0); // integer index driving slider + label
 
   ptsRef.current = route.points;
+
+  // Per-segment playback durations, rebuilt only when the route changes.
+  segDurRef.current = useMemo(() => buildSegmentDurations(route.points), [route]);
 
   useEffect(() => {
     if (!API_KEY) return;
@@ -230,9 +306,10 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
     let last = performance.now();
     let lastIntIdx = Math.floor(progressRef.current);
     const loop = (now: number) => {
-      const dt = (now - last) / 1000;
+      // Playback milliseconds to consume this frame: real frame time (clamped) × speed.
+      const addMs = Math.min(MAX_FRAME_MS, now - last) * speed;
       last = now;
-      const next = progressRef.current + dt * BASE_POINTS_PER_SEC * speed;
+      const next = advanceProgress(progressRef.current, addMs, segDurRef.current);
       if (next >= pts.length - 1) {
         progressRef.current = pts.length - 1;
         moveTo(progressRef.current);
