@@ -301,6 +301,12 @@ export async function wheelsEyeRoute(vehicleId: number, fromSec: number, toSec: 
       }];
     });
 
+  // WheelsEye returns itineraries newest-first, but the replay path (points) is
+  // chronological and the map numbers stops in array order. Sort stops by arrival
+  // so stop #1 is the first one the playback reaches — otherwise the numbering runs
+  // backwards against the play (Millitrack already returns stops chronologically).
+  stops.sort((a, b) => (a.arrivedAt ? Date.parse(a.arrivedAt) : 0) - (b.arrivedAt ? Date.parse(b.arrivedAt) : 0));
+
   return { points, stops, totalDistanceKm: +itineraryDistanceKm(itin, segments).toFixed(1) };
 }
 

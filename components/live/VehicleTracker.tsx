@@ -40,7 +40,10 @@ const RouteMap = dynamic(() => import("./RouteMap").then((m) => m.RouteMap), {
   ),
 });
 
-const LIVE_REFRESH_MS = 30_000;
+// Poll a bit faster than the fleet grid: the detail map glides the marker between
+// fixes, so more frequent updates make a moving vehicle read as continuously
+// driving. The provider state is cached ~10s server-side, so 15s stays cheap.
+const LIVE_REFRESH_MS = 15_000;
 
 type RouteAction = (input: { vehicleId: string; fromISO: string; toISO: string }) => Promise<VehicleRoute>;
 type LiveAction = (vehicleId: string) => Promise<VehicleLive>;

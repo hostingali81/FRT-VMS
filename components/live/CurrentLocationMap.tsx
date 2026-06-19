@@ -9,17 +9,49 @@ import { STATUS_META } from "./status-meta";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the Google Maps JS API has no bundled types here. */
 
+// Marker glide tuning. When a fresh fix arrives we animate the truck from where it
+// currently sits to the new position instead of teleporting — so a moving vehicle
+// reads as continuously driving (food-delivery style) rather than jumping on every
+// refresh. The glide lasts roughly the real gap between updates, clamped so a long
+// GPS gap doesn't crawl and a tiny one isn't instant.
+const GLIDE_MIN_MS = 700;
+const GLIDE_MAX_MS = 8000;
+const GLIDE_DEFAULT_MS = 1500;
+const MOVE_EPSILON_M = 2; // ignore sub-2m jitter (don't animate / re-orient for it)
+
+// Dead-reckoning ("coast"): GPS fixes only arrive every ~15-30s, so between them we
+// keep a running truck moving forward along its last heading at its reported speed —
+// that's how delivery apps look alive the instant you open them, instead of sitting
+// still until the next fix lands. The next real fix smoothly corrects any drift.
+const COAST_MIN_SPEED_KMH = 5; // below this, treat as parked — don't coast
+const COAST_MAX_MS = 60_000; // stop coasting if fixes dry up, so it can't run away
+const DT_CLAMP_S = 1; // cap per-frame step (e.g. after a backgrounded tab) to avoid a jump
+
+// easeInOutQuad — gentle start/stop so the glide doesn't look mechanical.
+const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
 /**
  * Single-marker map for a vehicle's current/last reported position. Shown as the
  * default view of /live/[vehicleId] before any route history is requested.
- * The marker is colour-coded by live status and points along the last heading
- * when the vehicle is moving.
+ *
+ * The marker is colour-coded by live status, oriented along its heading, glides
+ * smoothly to each new fix, and dead-reckons forward between fixes — so a running
+ * vehicle starts moving as soon as the map opens and keeps moving like a live
+ * delivery tracker.
  */
 export function CurrentLocationMap({ live }: { live: LiveVehicleStatus }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const mapsRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const rafRef = useRef<number | null>(null); // holds whichever animation is active (glide or coast)
+  const curPosRef = useRef<{ lat: number; lng: number } | null>(null); // marker's rendered position
+  const targetRef = useRef<{ lat: number; lng: number } | null>(null); // last real fix we animated toward
+  const headingRef = useRef(0);
+  const lastIconRef = useRef<any>(null); // skip redundant setIcon (data-URL reload stutters)
+  const lastFixAtRef = useRef(0); // wall-clock of the last accepted fix, for adaptive glide
+  const liveRef = useRef(live); // latest props, so the coast loop reads fresh speed/heading/status
+  liveRef.current = live;
 
   const [ready, setReady] = useState(false);
   const [iconTick, setIconTick] = useState(0);
@@ -53,12 +85,65 @@ export function CurrentLocationMap({ live }: { live: LiveVehicleStatus }) {
     };
   }, []);
 
-  // Draw / update the marker whenever the map is ready or the position changes.
+  // Draw / animate the marker whenever the map is ready or the live fix changes.
   useEffect(() => {
     if (!ready || !containerRef.current || !hasPos) return;
     const maps = mapsRef.current;
-    const pos = { lat: lat as number, lng: lng as number };
+    const target = { lat: lat as number, lng: lng as number };
 
+    // Apply the icon for a heading, skipping the call when the cached icon is
+    // unchanged (5° buckets) so a per-frame animation doesn't reload the data-URL.
+    // Reads colour/category from liveRef so a long-lived coast loop stays current.
+    const applyIcon = (heading: number) => {
+      const l = liveRef.current;
+      const col = STATUS_META[l.live_status].hex;
+      const icon = vehicleImageIcon(maps, col, l.category, heading) ?? vehicleSymbol(col, l.category, heading);
+      if (icon !== lastIconRef.current) {
+        markerRef.current.setIcon(icon);
+        lastIconRef.current = icon;
+      }
+    };
+
+    // Dead-reckon forward from the marker's current spot while the vehicle is
+    // running, until the next real fix arrives (which cancels this) or COAST_MAX_MS.
+    const startCoast = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      let last = performance.now();
+      const startedAt = last;
+      const loop = (ts: number) => {
+        const l = liveRef.current;
+        const speed = l.speed_kmh ?? 0;
+        if (l.live_status !== "running" || speed < COAST_MIN_SPEED_KMH || ts - startedAt > COAST_MAX_MS) {
+          rafRef.current = null;
+          return;
+        }
+        const cur = curPosRef.current;
+        if (!cur) {
+          rafRef.current = null;
+          return;
+        }
+        const dt = Math.min(DT_CLAMP_S, (ts - last) / 1000);
+        last = ts;
+        const heading = l.course ?? headingRef.current;
+        const meters = (speed / 3.6) * dt;
+        const off = maps.geometry.spherical.computeOffset(new maps.LatLng(cur.lat, cur.lng), meters, heading);
+        const p = { lat: off.lat(), lng: off.lng() };
+        markerRef.current.setPosition(p);
+        curPosRef.current = p;
+        headingRef.current = heading;
+        applyIcon(heading);
+        rafRef.current = requestAnimationFrame(loop);
+      };
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    const maybeCoast = () => {
+      const l = liveRef.current;
+      if (l.live_status === "running" && (l.speed_kmh ?? 0) >= COAST_MIN_SPEED_KMH) startCoast();
+    };
+
+    // First render: create the map + marker in place, then start coasting right away
+    // so a running vehicle is already moving when the map opens.
     if (!mapRef.current) {
       mapRef.current = new maps.Map(containerRef.current, {
         mapTypeControl: false,
@@ -68,26 +153,81 @@ export function CurrentLocationMap({ live }: { live: LiveVehicleStatus }) {
         gestureHandling: "greedy",
         clickableIcons: false,
         zoom: 15,
-        center: pos,
+        center: target,
       });
+      markerRef.current = new maps.Marker({ map: mapRef.current, position: target, zIndex: 5, title: live.address ?? "" });
+      curPosRef.current = target;
+      targetRef.current = target;
+      headingRef.current = live.course ?? 0;
+      lastFixAtRef.current = performance.now();
+      applyIcon(headingRef.current);
+      maybeCoast();
+      return;
     }
-    const map = mapRef.current;
 
-    // Top-view vehicle, oriented to its last heading (course) when known.
-    if (!markerRef.current) {
-      markerRef.current = new maps.Marker({ map, position: pos, zIndex: 5, title: live.address ?? "" });
+    const map = mapRef.current;
+    const dist = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+      maps.geometry.spherical.computeDistanceBetween(new maps.LatLng(a.lat, a.lng), new maps.LatLng(b.lat, b.lng));
+
+    // The effect also re-runs for icon/colour/speed changes — if the fix itself
+    // didn't move, just refresh the icon (the coast loop, if any, keeps running and
+    // reads fresh speed/heading on its own).
+    const prev = targetRef.current;
+    if (prev && dist(prev, target) < MOVE_EPSILON_M) {
+      applyIcon(headingRef.current);
+      return;
     }
-    markerRef.current.setPosition(pos);
-    markerRef.current.setIcon(
-      vehicleImageIcon(maps, color, live.category, live.course ?? 0) ??
-        vehicleSymbol(color, live.category, live.course ?? 0),
-    );
-    map.panTo(pos);
-  }, [ready, iconTick, hasPos, lat, lng, color, live.category, live.course, live.address]);
+
+    // New fix → glide from the marker's current (possibly coasted) spot to it,
+    // correcting any dead-reckoning drift, then resume coasting.
+    const from = curPosRef.current ?? prev ?? target;
+    const moved = dist(from, target);
+    const heading =
+      moved >= MOVE_EPSILON_M
+        ? maps.geometry.spherical.computeHeading(new maps.LatLng(from.lat, from.lng), new maps.LatLng(target.lat, target.lng))
+        : live.course ?? headingRef.current;
+    headingRef.current = heading;
+    targetRef.current = target;
+
+    const now = performance.now();
+    const gap = lastFixAtRef.current ? now - lastFixAtRef.current : GLIDE_DEFAULT_MS;
+    lastFixAtRef.current = now;
+    const dur = Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, gap));
+
+    // Gently bring the camera to the new fix once; the marker glides in to meet it.
+    map.panTo(target);
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const start = now;
+    const f0 = from;
+    const step = (ts: number) => {
+      const t = Math.min(1, (ts - start) / dur);
+      const e = ease(t);
+      const p = { lat: f0.lat + (target.lat - f0.lat) * e, lng: f0.lng + (target.lng - f0.lng) * e };
+      markerRef.current.setPosition(p);
+      curPosRef.current = p;
+      applyIcon(heading);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        curPosRef.current = target;
+        rafRef.current = null;
+        maybeCoast();
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+  }, [ready, iconTick, hasPos, lat, lng, color, live.category, live.course, live.live_status, live.speed_kmh, live.address]);
+
+  // Stop any in-flight animation on unmount.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const recenter = () => {
-    if (mapRef.current && hasPos) {
-      mapRef.current.panTo({ lat: lat as number, lng: lng as number });
+    if (mapRef.current && curPosRef.current) {
+      mapRef.current.panTo(curPosRef.current);
       mapRef.current.setZoom(16);
     }
   };
