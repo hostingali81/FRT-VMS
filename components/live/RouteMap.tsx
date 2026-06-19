@@ -126,6 +126,7 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: true,
+        gestureHandling: "greedy",
         zoom: 12,
         center: pts.length ? { lat: pts[0].lat, lng: pts[0].lng } : { lat: 26.85, lng: 80.95 },
       });
@@ -300,12 +301,13 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
 
       {/* Playback controls */}
       <Card>
-        <CardContent className="space-y-2 py-3">
+        <CardContent className="space-y-3 py-3">
+          {/* Transport + scrubber — slider can shrink freely so nothing overflows */}
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={onPlayPause}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 active:scale-95"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 active:scale-95"
               aria-label={playing ? "Pause" : "Play"}
             >
               {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -313,7 +315,7 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
             <button
               type="button"
               onClick={onReset}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 active:scale-95"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 active:scale-95"
               aria-label="Reset"
             >
               <RotateCcw className="h-4 w-4" />
@@ -325,28 +327,34 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
               step={1}
               value={Math.min(idx, lastIndex)}
               onChange={(e) => onSeek(Number(e.target.value))}
-              className="h-1.5 flex-1 cursor-pointer accent-blue-600"
+              className="h-1.5 min-w-0 flex-1 cursor-pointer touch-none accent-blue-600"
               aria-label="Route position"
             />
-            <div className="flex shrink-0 gap-1">
+          </div>
+
+          {/* Speed selector + readout */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="inline-flex shrink-0 rounded-xl bg-slate-100 p-0.5">
               {SPEEDS.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => setSpeed(s)}
                   className={cn(
-                    "rounded-md px-2 py-1 text-xs font-semibold transition",
-                    speed === s ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                    "rounded-lg px-2.5 py-1.5 text-xs font-semibold transition active:scale-95",
+                    speed === s ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
                   )}
                 >
                   {s}x
                 </button>
               ))}
             </div>
-          </div>
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>{current?.time ? timeLabel(current.time) : `Point ${Math.min(idx, lastIndex) + 1} / ${route.points.length}`}</span>
-            {current ? <span className="font-semibold text-slate-700">{current.speedKmh} km/h</span> : null}
+            <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
+              <span className="truncate">
+                {current?.time ? timeLabel(current.time) : `Point ${Math.min(idx, lastIndex) + 1} / ${route.points.length}`}
+              </span>
+              {current ? <span className="shrink-0 font-semibold text-slate-700">{current.speedKmh} km/h</span> : null}
+            </div>
           </div>
         </CardContent>
       </Card>

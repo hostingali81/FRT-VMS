@@ -38,6 +38,10 @@ export const viewport: Viewport = {
   themeColor: "#0f172a",
   width: "device-width",
   initialScale: 1,
+  // App-like: a stray pinch/double-tap shouldn't zoom the whole page (the maps
+  // handle their own zoom). Honoured in the installed PWA + Android Chrome.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 
