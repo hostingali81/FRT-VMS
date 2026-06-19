@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
+import { Loader2, LocateFixed, Pause, Play, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadGoogleMaps, MAPS_API_KEY } from "@/lib/maps/loader";
 import { loadTruckSprite, vehicleImageIcon, vehicleSymbol } from "@/lib/maps/markers";
@@ -33,6 +33,8 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
   const overlaysRef = useRef<any[]>([]);
   const infoRef = useRef<any>(null);
   const moverRef = useRef<any>(null);
+  const lastIconRef = useRef<any>(null); // last icon set on the mover (skip redundant setIcon)
+  const boundsRef = useRef<any>(null); // route bounds, for the recenter button
   const progressRef = useRef(0); // continuous index into route.points
   const rafRef = useRef<number | null>(null);
   const ptsRef = useRef(route.points);
@@ -80,6 +82,7 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
       moverRef.current.setMap(null);
       moverRef.current = null;
     }
+    lastIconRef.current = null;
   }, []);
 
   // Heading (degrees) at point i: prefer the provider's course, else compute it
@@ -107,10 +110,16 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
       const a = pts[i];
       const b = pts[Math.min(i + 1, pts.length - 1)];
       mover.setPosition(new maps.LatLng(a.lat + (b.lat - a.lat) * frac, a.lng + (b.lng - a.lng) * frac));
-      mover.setIcon(
+      // Position updates every frame (smooth glide); the icon only changes when the
+      // heading crosses a 5° bucket. Setting a data-URL icon every frame forced the
+      // marker image to reload and made playback stutter — so skip if unchanged.
+      const icon =
         vehicleImageIcon(maps, "#1d4ed8", category, headingAt(i)) ??
-          vehicleSymbol("#1d4ed8", category, headingAt(i)),
-      );
+        vehicleSymbol("#1d4ed8", category, headingAt(i));
+      if (icon !== lastIconRef.current) {
+        mover.setIcon(icon);
+        lastIconRef.current = icon;
+      }
     },
     [headingAt, category],
   );
@@ -125,7 +134,9 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
       mapRef.current = new maps.Map(containerRef.current, {
         mapTypeControl: false,
         streetViewControl: false,
-        fullscreenControl: true,
+        fullscreenControl: false,
+        zoomControl: true,
+        clickableIcons: false,
         gestureHandling: "greedy",
         zoom: 12,
         center: pts.length ? { lat: pts[0].lat, lng: pts[0].lng } : { lat: 26.85, lng: 80.95 },
@@ -199,6 +210,7 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
 
     const bounds = new maps.LatLngBounds();
     for (const p of path) bounds.extend(p);
+    boundsRef.current = bounds;
     map.fitBounds(bounds, 48);
   }, [ready, route, clearOverlays, category, headingAt]);
 
@@ -235,10 +247,23 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
     };
   }, [playing, speed, ready, moveTo]);
 
-  // Swap the placeholder symbol for the truck sprite once it finishes decoding.
+  // Once the sprite is ready, pre-build + pre-decode every heading bucket so the
+  // playback loop only ever hits the cache (no canvas/data-URL work mid-frame),
+  // then refresh the mover so the placeholder symbol becomes the truck.
   useEffect(() => {
-    if (ready && moverRef.current) moveTo(progressRef.current);
-  }, [iconTick, ready, moveTo]);
+    if (!ready) return;
+    const maps = mapsRef.current;
+    if (maps) {
+      for (let h = 0; h < 360; h += 5) {
+        const icon = vehicleImageIcon(maps, "#1d4ed8", category, h);
+        if (icon?.url) {
+          const warm = new Image();
+          warm.src = icon.url;
+        }
+      }
+    }
+    if (moverRef.current) moveTo(progressRef.current);
+  }, [iconTick, ready, category, moveTo]);
 
   const lastIndex = Math.max(0, route.points.length - 1);
   const atEnd = idx >= lastIndex;
@@ -266,6 +291,10 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
     progressRef.current = 0;
     setIdx(0);
     moveTo(0);
+  };
+  const recenter = () => {
+    const map = mapRef.current;
+    if (map && boundsRef.current) map.fitBounds(boundsRef.current, 48);
   };
 
   if (!API_KEY) {
@@ -296,7 +325,16 @@ export function RouteMap({ route, category }: { route: VehicleRoute; category?: 
           <div className="absolute inset-0 grid place-items-center bg-slate-50">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" aria-hidden="true" />
           </div>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            onClick={recenter}
+            aria-label="Fit route"
+            className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full bg-white/95 text-slate-700 shadow-md ring-1 ring-black/5 backdrop-blur transition active:scale-95"
+          >
+            <LocateFixed className="h-[18px] w-[18px]" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {/* Playback controls */}
