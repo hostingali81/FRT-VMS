@@ -312,6 +312,7 @@ export type LiveVehicleStatus = {
   circle: string | null;
   division: string | null;
   substation: string | null;
+  vendor_name: string | null;
   provider: LiveProvider;
   device_id: number;
   device_name: string | null;

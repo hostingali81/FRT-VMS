@@ -154,9 +154,11 @@ export async function syncMonthlyGpsDistance(
 }
 
 // ── Per-fill segment distance ───────────────────────────────────────────────
-// gps_distance_km on each fuel log = GPS distance from the PREVIOUS fill to that
-// fill. Monthly and all-time mileage are both built from these segments, so this
-// is what makes the average possible. Distinct from the monthly distance above.
+// gps_distance_km on each fuel log = GPS distance from the PREVIOUS fill OF THE SAME
+// FUEL TYPE to that fill. Monthly and all-time mileage are built per fuel type from
+// these segments, so a bi-fuel vehicle's CNG and petrol mileages stay separate and a
+// same-day starter top-up doesn't zero out the main fuel's segment. Distinct from the
+// monthly distance above.
 
 export type SegmentSyncResult = {
   ok: boolean;
@@ -230,8 +232,9 @@ async function segmentDistanceKm(
 
 /**
  * Fill in gps_distance_km for every fuel-log segment that doesn't have one yet, for
- * company-fuelled GPS-mapped vehicles. One provider call per open segment (tiled if
- * the gap exceeds a month).
+ * company-fuelled GPS-mapped vehicles. Each segment is measured from the previous
+ * fill of the SAME fuel type. One provider call per open segment (tiled if the gap
+ * exceeds a month).
  *
  * Already-synced segments are skipped — a closed segment's distance never changes.
  * (Known limitation: inserting a back-dated fill or deleting a middle fill can leave
@@ -266,20 +269,31 @@ export async function syncFuelSegmentDistances(
     try {
       const { data: logs } = await supabase
         .from("vehicle_fuel_logs")
-        .select("id,log_date,logged_at,created_at,gps_distance_km")
+        .select("id,log_date,logged_at,created_at,fuel_type,gps_distance_km")
         .eq("vehicle_id", vehicle.id)
         .order("log_date", { ascending: true })
         .order("created_at", { ascending: true });
 
       if (!logs || logs.length < 2) continue; // need two fills for a segment
 
+      // A fill's segment spans from its previous SAME-TYPE fill (skipping any
+      // intervening other-type fills), so bi-fuel vehicles get a real per-type
+      // distance instead of a 0-km same-day cross-type gap. Walk once, tracking the
+      // last index seen for each fuel type. (A single-fuel vehicle's same-type
+      // predecessor is just the immediate predecessor, so its numbers are unchanged.)
       let touched = false;
-      for (let i = 1; i < logs.length; i++) {
+      const prevIdxByType = new Map<string, number>();
+      for (let i = 0; i < logs.length; i++) {
+        const typeKey = logs[i].fuel_type ?? "__untyped__";
+        const prevIdx = prevIdxByType.get(typeKey);
+        prevIdxByType.set(typeKey, i);
+
+        if (prevIdx === undefined) continue; // first fill of this type — no segment
         if (logs[i].gps_distance_km != null) continue; // closed segment — skip
 
         // Exact fill times when available, else the date's midnight. With times,
-        // multiple fills on the same day get a real (non-zero) gap.
-        const fromMs = fuelLogInstant(logs[i - 1]);
+        // multiple same-type fills on one day get a real (non-zero) gap.
+        const fromMs = fuelLogInstant(logs[prevIdx]);
         const toMs = fuelLogInstant(logs[i]);
 
         // No measurable gap (same date, no times) → record 0 (not null) so the

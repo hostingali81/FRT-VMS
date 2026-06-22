@@ -12,7 +12,8 @@ import { Timeline } from "@/components/shared/Timeline";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { QuickFuelForm } from "@/components/fuel/QuickFuelForm";
-import { computeMileage, mileageForMonth, type MileageBreakdown } from "@/lib/mileage";
+import { computeMileageByFuel, mileageByFuelForMonth, type MileageBreakdown } from "@/lib/mileage";
+import { FUEL_LOG_TYPES } from "@/lib/types";
 import type {
   DriverAssignment,
   DriverOwnershipHistoryItem,
@@ -118,12 +119,26 @@ export function VehicleProfileTabs({
   const hasGpsDevice = Boolean(vehicle.gps_device_id);
   const anySynced = useMemo(() => fuelLogs.some((l) => l.gps_synced_at), [fuelLogs]);
 
-  // Tankful-method mileage: GPS(first→last fill) ÷ (fuel minus the latest fill).
-  const monthMileage = useMemo(
-    () => mileageForMonth(fuelLogs, currentYearMonth()),
+  // Tankful-method mileage, per fuel type: GPS(first→last same-type fill) ÷ (that
+  // type's fuel minus its latest fill). Bi-fuel vehicles (CNG + a petrol starter
+  // dose) get one figure per fuel — combining them would be meaningless.
+  const monthMileageByFuel = useMemo(
+    () => mileageByFuelForMonth(fuelLogs, currentYearMonth()),
     [fuelLogs],
   );
-  const allTimeMileage = useMemo(() => computeMileage(fuelLogs), [fuelLogs]);
+  const allTimeMileageByFuel = useMemo(() => computeMileageByFuel(fuelLogs), [fuelLogs]);
+
+  // Fuel types that appear in this vehicle's logs (a row of mileage cards per type),
+  // in FUEL_LOG_TYPES order with any untyped legacy fills last. "" = untyped bucket.
+  const mileageFuelTypes = useMemo(() => {
+    const present = new Set<string>();
+    for (const l of fuelLogs) present.add(l.fuel_type ?? "");
+    const order = (t: string) => {
+      const i = (FUEL_LOG_TYPES as readonly string[]).indexOf(t);
+      return i === -1 ? FUEL_LOG_TYPES.length : i;
+    };
+    return Array.from(present).sort((a, b) => order(a) - order(b));
+  }, [fuelLogs]);
 
   // Monthly summary for fuel logs (current calendar month)
   const currentMonthSummary = useMemo(() => {
@@ -516,11 +531,25 @@ export function VehicleProfileTabs({
               </div>
             )}
 
-            {/* Mileage — tankful method, with the calculation in a tooltip */}
-            {isCompany && (
-              <div className="grid grid-cols-2 gap-3">
-                <MileageCard m={monthMileage} label="Is mahine ka mileage" />
-                <MileageCard m={allTimeMileage} label="All-time mileage" />
+            {/* Mileage — tankful method per fuel type, with the calculation in a
+                tooltip. Each fuel logged gets its own month + all-time pair. */}
+            {isCompany && fuelLogs.length > 0 && (
+              <div className="space-y-3">
+                {mileageFuelTypes.map((ft) => {
+                  const month = monthMileageByFuel.find((m) => (m.fuelType ?? "") === ft)?.breakdown ?? null;
+                  const allTime = allTimeMileageByFuel.find((m) => (m.fuelType ?? "") === ft)?.breakdown ?? null;
+                  return (
+                    <div key={ft || "untyped"}>
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {ft || "Fuel"} mileage
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <MileageCard m={month} label="Is mahine ka mileage" />
+                        <MileageCard m={allTime} label="All-time mileage" />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

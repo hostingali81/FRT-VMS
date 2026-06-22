@@ -36,6 +36,12 @@ const STATUS_RANK: Record<LiveStatus, number> = {
   expired: 6,
 };
 
+// Within a status bucket, order by FRT number (FRT 1, FRT 2, …). Unnumbered last.
+const frtRank = (frt_no: string | null) => {
+  const m = frt_no?.match(/\d+/);
+  return m ? parseInt(m[0], 10) : Number.POSITIVE_INFINITY;
+};
+
 const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const isMtVehicle = (v: FleetVehicle) =>
   v.gps_company === "VehicleStep" && /^\d+$/.test(String(v.gps_device_id ?? "").trim());
@@ -48,6 +54,7 @@ function baseFields(v: FleetVehicle) {
     circle: v.current_circle ?? v.home_circle,
     division: v.division,
     substation: v.substation,
+    vendor_name: v.vendor_name,
   };
 }
 
@@ -166,9 +173,9 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
   items.sort((a, b) => {
     const rank = STATUS_RANK[a.live_status] - STATUS_RANK[b.live_status];
     if (rank !== 0) return rank;
-    const sa = a.speed_kmh ?? -1;
-    const sb = b.speed_kmh ?? -1;
-    if (sb !== sa) return sb - sa;
+    const fa = frtRank(a.frt_no);
+    const fb = frtRank(b.frt_no);
+    if (fa !== fb) return fa - fb;
     return a.registration_no.localeCompare(b.registration_no);
   });
 

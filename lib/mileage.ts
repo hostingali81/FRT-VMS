@@ -1,6 +1,6 @@
 // Pure mileage maths — no Supabase, no server-only imports, so it works in both
 // Server Components and Client Components.
-import type { FuelLogEntry } from "@/lib/types";
+import { FUEL_LOG_TYPES, type FuelLogEntry, type FuelLogType } from "@/lib/types";
 
 export type MileageBreakdown = {
   kmpl: number; // distanceKm / litres, 1 decimal
@@ -74,4 +74,47 @@ export function computeMileage(logs: FuelLogEntry[]): MileageBreakdown | null {
 /** Mileage for a single YYYY-MM month, taken from a vehicle's full log list. */
 export function mileageForMonth(allLogs: FuelLogEntry[], yearMonth: string): MileageBreakdown | null {
   return computeMileage(allLogs.filter((l) => l.log_date.startsWith(yearMonth)));
+}
+
+/** One fuel type's mileage within a window. */
+export type FuelMileage = {
+  fuelType: FuelLogType | null; // null = legacy logs with no recorded type
+  breakdown: MileageBreakdown;
+};
+
+/**
+ * Per-fuel-type mileage. A bi-fuel vehicle (e.g. CNG to run + a small petrol dose to
+ * start) can't be measured on a combined tankful — CNG litres and petrol litres
+ * aren't additive, and a same-day cross-type fill breaks the "fill when empty"
+ * assumption. So we split the logs by fuel_type and run the tankful method on each
+ * type on its own. Types with too few fills (or unsynced segments) are dropped.
+ *
+ * This is only correct when each fill's gps_distance_km is the GPS distance since the
+ * previous fill OF THE SAME TYPE (see syncFuelSegmentDistances) — otherwise the
+ * distance driven through an intervening other-type fill would be lost.
+ */
+export function computeMileageByFuel(logs: FuelLogEntry[]): FuelMileage[] {
+  const byType = new Map<FuelLogType | null, FuelLogEntry[]>();
+  for (const log of logs) {
+    const key = log.fuel_type ?? null;
+    const group = byType.get(key);
+    if (group) group.push(log);
+    else byType.set(key, [log]);
+  }
+
+  const out: FuelMileage[] = [];
+  for (const [fuelType, group] of Array.from(byType)) {
+    const breakdown = computeMileage(group);
+    if (breakdown) out.push({ fuelType, breakdown });
+  }
+
+  // Stable display order: known fuel types in FUEL_LOG_TYPES order, untyped last.
+  const order = (t: FuelLogType | null) =>
+    t == null ? FUEL_LOG_TYPES.length : FUEL_LOG_TYPES.indexOf(t);
+  return out.sort((a, b) => order(a.fuelType) - order(b.fuelType));
+}
+
+/** Per-fuel-type mileage for a single YYYY-MM month, from a vehicle's full log list. */
+export function mileageByFuelForMonth(allLogs: FuelLogEntry[], yearMonth: string): FuelMileage[] {
+  return computeMileageByFuel(allLogs.filter((l) => l.log_date.startsWith(yearMonth)));
 }

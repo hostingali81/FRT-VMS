@@ -19,7 +19,7 @@ import {
   preloadFuelMonthData,
 } from "@/lib/data";
 import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
-import { computeMileage, type MileageBreakdown } from "@/lib/mileage";
+import { computeMileageByFuel, type FuelMileage, type MileageBreakdown } from "@/lib/mileage";
 import { syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
 import { formatDate } from "@/lib/utils/format";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
@@ -89,12 +89,19 @@ export default async function FuelDashboardPage({
     const totalAmount = logs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0);
     const gpsKm = gpsKmByVehicle.get(v.vehicle_id) ?? 0;
     // Mileage uses the tankful method (GPS first→last fill ÷ fuel minus the latest
-    // fill), not the raw monthly GPS ÷ litres.
-    const monthlyMileage = computeMileage(logs);
-    const allTimeMileage = computeMileage(allLogsByVehicle.get(v.vehicle_id) ?? []);
+    // fill), not the raw monthly GPS ÷ litres — and per fuel type, so a bi-fuel
+    // vehicle's CNG and petrol stay separate.
+    const monthlyMileage = computeMileageByFuel(logs);
+    const allTimeMileage = computeMileageByFuel(allLogsByVehicle.get(v.vehicle_id) ?? []);
+    // Dominant fuel (most litres burned) for the fleet roll-up, so a bi-fuel vehicle
+    // contributes its distance once instead of once per fuel type.
+    const primaryMonthly = monthlyMileage.reduce<MileageBreakdown | null>(
+      (best, m) => (best && best.litres >= m.breakdown.litres ? best : m.breakdown),
+      null,
+    );
     const hasGps = Boolean(v.gps_device_id);
     const canManage = canEditVehicle(profile, v, lookups);
-    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, monthlyMileage, allTimeMileage, hasGps, canManage };
+    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, monthlyMileage, allTimeMileage, primaryMonthly, hasGps, canManage };
   }).sort((a, b) => frtSortKey(a.vehicle.frt_no) - frtSortKey(b.vehicle.frt_no));
 
   const companyRows = rows.filter((r) => r.vehicle.fuel_ownership === "company");
@@ -107,8 +114,8 @@ export default async function FuelDashboardPage({
   const companyKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
   // Fleet monthly mileage = total mileage-distance ÷ total mileage-fuel across the
   // company vehicles that have a computable figure (reconciles with each row's avg).
-  const fleetMileageKm = companyRows.reduce((sum, r) => sum + (r.monthlyMileage?.distanceKm ?? 0), 0);
-  const fleetMileageL = companyRows.reduce((sum, r) => sum + (r.monthlyMileage?.litres ?? 0), 0);
+  const fleetMileageKm = companyRows.reduce((sum, r) => sum + (r.primaryMonthly?.distanceKm ?? 0), 0);
+  const fleetMileageL = companyRows.reduce((sum, r) => sum + (r.primaryMonthly?.litres ?? 0), 0);
   const grandAvg = fleetMileageL > 0 ? +(fleetMileageKm / fleetMileageL).toFixed(1) : null;
 
   // GPS sync is open to vehicle managers; the action itself scopes each role to
@@ -274,10 +281,10 @@ export default async function FuelDashboardPage({
                           )}
                         </td>
                         <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          <MileageCell m={monthlyMileage} tone="green" label="Is mahine" />
+                          <MileageCell items={monthlyMileage} tone="green" label="Is mahine" />
                         </td>
                         <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          <MileageCell m={allTimeMileage} tone="blue" label="All-time" />
+                          <MileageCell items={allTimeMileage} tone="blue" label="All-time" />
                         </td>
                         <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
                           {isCompany && canManage && (
@@ -303,25 +310,33 @@ export default async function FuelDashboardPage({
   );
 }
 
-/** Mileage badge with a tooltip that spells out the calculation. */
-function MileageCell({ m, tone, label }: { m: MileageBreakdown | null; tone: "green" | "blue"; label: string }) {
-  if (!m) return <span className="text-slate-300">—</span>;
+/** Per-fuel-type mileage badges, each with a tooltip that spells out the calc. */
+function MileageCell({ items, tone, label }: { items: FuelMileage[]; tone: "green" | "blue"; label: string }) {
+  if (items.length === 0) return <span className="text-slate-300">—</span>;
   return (
-    <Tooltip
-      content={
-        <span className="block">
-          <span className="font-semibold">{label}: {m.kmpl} km/L</span>
-          <br />
-          {m.distanceKm.toLocaleString("en-IN")} km ÷ {m.litres} L
-          <br />
-          {formatDate(m.fromDate)} → {formatDate(m.toDate)} · {m.fills} fills
-          <br />
-          <span className="text-slate-400">aakhri fill chhod ke</span>
-        </span>
-      }
-    >
-      <Badge tone={tone}>{m.kmpl}</Badge>
-    </Tooltip>
+    <div className="flex flex-col items-end gap-1">
+      {items.map(({ fuelType, breakdown: m }) => (
+        <Tooltip
+          key={fuelType ?? "untyped"}
+          content={
+            <span className="block">
+              <span className="font-semibold">{fuelType ?? "Fuel"} · {label}: {m.kmpl} km/L</span>
+              <br />
+              {m.distanceKm.toLocaleString("en-IN")} km ÷ {m.litres} L
+              <br />
+              {formatDate(m.fromDate)} → {formatDate(m.toDate)} · {m.fills} fills
+              <br />
+              <span className="text-slate-400">aakhri fill chhod ke</span>
+            </span>
+          }
+        >
+          <Badge tone={tone}>
+            {fuelType && <span className="mr-1 text-[10px] font-medium opacity-70">{fuelType}</span>}
+            {m.kmpl}
+          </Badge>
+        </Tooltip>
+      ))}
+    </div>
   );
 }
 

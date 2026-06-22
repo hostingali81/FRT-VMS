@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { RefreshCw, SatelliteDish } from "lucide-react";
+import { RefreshCw, SatelliteDish, Search, X } from "lucide-react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/form";
 import type { FleetLiveStatus, LiveStatus } from "@/lib/types";
 import { LIVE_STATUSES } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils/format";
@@ -39,6 +40,7 @@ export function LiveTracking({
     keepPreviousData: true,
   });
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   const snapshot = data ?? initial;
 
@@ -58,8 +60,16 @@ export function LiveTracking({
 
   // Filter chips: "All" plus every status that actually has vehicles.
   const activeStatuses = LIVE_STATUSES.filter((s) => snapshot.counts[s] > 0);
-  const vehicles =
-    filter === "all" ? snapshot.vehicles : snapshot.vehicles.filter((v) => v.live_status === filter);
+
+  // Status chip + free-text search (FRT, registration, substation, division,
+  // circle, vendor, device name, last-known address) applied together.
+  const q = query.trim().toLowerCase();
+  const vehicles = snapshot.vehicles.filter((v) => {
+    if (filter !== "all" && v.live_status !== filter) return false;
+    if (!q) return true;
+    return [v.frt_no, v.registration_no, v.substation, v.division, v.circle, v.vendor_name, v.device_name, v.address]
+      .some((field) => field?.toLowerCase().includes(q));
+  });
 
   return (
     <div className="space-y-4">
@@ -119,17 +129,46 @@ export function LiveTracking({
         })}
       </div>
 
+      {/* Search by FRT / registration / location */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+        <Input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search FRT, registration, vendor…"
+          aria-label="Search vehicles"
+          className="pl-9 pr-9"
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
       {/* Vehicle cards */}
       {vehicles.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-sm font-medium text-slate-600">
-              {filter === "all" ? "No live GPS vehicles to show" : `No ${STATUS_META[filter].label.toLowerCase()} vehicles`}
+              {q
+                ? `No vehicles match “${query.trim()}”`
+                : filter === "all"
+                  ? "No live GPS vehicles to show"
+                  : `No ${STATUS_META[filter].label.toLowerCase()} vehicles`}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              {filter === "all"
-                ? "Live tracking covers vehicles with a VehicleStep GPS device mapped."
-                : "Tap All to see the whole fleet."}
+              {q
+                ? "Try a different FRT number, registration, or location."
+                : filter === "all"
+                  ? "Live tracking covers vehicles with a VehicleStep GPS device mapped."
+                  : "Tap All to see the whole fleet."}
             </p>
           </CardContent>
         </Card>
@@ -140,7 +179,7 @@ export function LiveTracking({
               <VehicleLiveCard key={vehicle.vehicle_id} vehicle={vehicle} />
             ))}
           </div>
-          {filter === "all" && snapshot.untracked > 0 ? (
+          {filter === "all" && !q && snapshot.untracked > 0 ? (
             <p className="text-center text-xs text-slate-400">
               {snapshot.untracked} GPS-mapped vehicle{snapshot.untracked === 1 ? "" : "s"} not reporting live right now.
             </p>
