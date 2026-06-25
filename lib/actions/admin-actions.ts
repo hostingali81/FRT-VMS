@@ -171,12 +171,35 @@ export async function createSubstationAction(formData: FormData) {
   const supabase = requireAdminClient();
   const name = textValue(formData, "name");
   const divisionId = textValue(formData, "division_id");
+  const frtNo = textValue(formData, "frt_no");
   if (!name || !divisionId) redirect("/admin?error=substation-required");
 
-  const { error } = await supabase.from("substations").insert({ name, division_id: divisionId });
+  const { error } = await supabase.from("substations").insert({ name, division_id: divisionId, frt_no: frtNo });
   if (error) redirect("/admin?error=substation-create");
 
   revalidatePath("/admin");
   redirect("/admin?substation=created");
+}
+
+// Edit an existing substation's name and FRT number. FRT denotes the posting, so
+// this is where a substation's FRT is set/changed — vehicles posted here inherit it.
+export async function updateSubstationAction(formData: FormData) {
+  await requireRole(["super_admin"]);
+  const supabase = requireAdminClient();
+  const id = textValue(formData, "substation_id");
+  const name = textValue(formData, "name");
+  const frtNo = textValue(formData, "frt_no");
+  if (!id || !name) redirect("/admin?error=substation-required");
+
+  const { error } = await supabase.from("substations").update({ name, frt_no: frtNo }).eq("id", id);
+  if (error) redirect("/admin?error=substation-update");
+
+  // The vehicle list/cards read FRT from the current substation via
+  // vehicle_current_view, so refresh those surfaces too.
+  revalidatePath("/admin");
+  revalidatePath("/vehicles");
+  revalidatePath("/dashboard");
+  revalidatePath("/live");
+  redirect("/admin?substation=updated");
 }
 

@@ -101,7 +101,7 @@ export const getAllLookups = cache(async (): Promise<LookupData> => {
     supabase.from("zones").select("id,name").order("name"),
     supabase.from("circles").select("id,name,zone_id,state,discom,contract_ref").order("name"),
     supabase.from("divisions").select("id,name,circle_id").order("name"),
-    supabase.from("substations").select("id,name,division_id").order("name"),
+    supabase.from("substations").select("id,name,division_id,frt_no").order("name"),
   ]);
 
   if (zones.error || circles.error || divisions.error || substations.error) return mockLookups;

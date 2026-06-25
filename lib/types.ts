@@ -56,6 +56,9 @@ export type Substation = {
   id: string;
   name: string;
   division_id: string;
+  // FRT number denotes the substation/posting; the vehicle currently posted here
+  // displays this FRT (derived in vehicle_current_view). Null until assigned.
+  frt_no?: string | null;
 };
 
 export type LookupData = {

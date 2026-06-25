@@ -20,7 +20,8 @@ const optionalYear = z
 
 export const vehicleSchema = z.object({
   registration_no: z.string().min(4, "Registration number is too short").max(15).toUpperCase(),
-  frt_no: optionalText,
+  // frt_no is no longer a vehicle field — FRT denotes the substation/posting and is
+  // managed in Admin → Substation FRT Numbers; the view derives it per vehicle.
   vehicle_type: z.string().min(1, "Vehicle type is required"),
   fuel_type: z.enum(["Diesel", "Petrol", "CNG", "EV"]),
   fuel_ownership: z.enum(["company", "vendor"]).default("company"),

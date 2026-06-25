@@ -13,6 +13,7 @@ import {
   createSubstationAction,
   createUserAction,
   createZoneAction,
+  updateSubstationAction,
   updateUserProfileAction,
 } from "@/lib/actions/admin-actions";
 import { requireRole, ROLE_LABELS } from "@/lib/auth";
@@ -45,6 +46,7 @@ export default async function AdminPage() {
 
         <UserList users={users} lookups={lookups} />
         <MasterSetup lookups={lookups} />
+        <SubstationManager lookups={lookups} />
       </div>
     </AppShell>
   );
@@ -206,8 +208,64 @@ function MasterSetup({ lookups }: { lookups: LookupData }) {
               ))}
             </Select>
           </Field>
+          <Field label="FRT No">
+            <Input name="frt_no" placeholder="FRT 1" />
+          </Field>
           <SubmitButton variant="secondary" className="w-full">Add Substation</SubmitButton>
         </form>
+      </div>
+    </details>
+  );
+}
+
+// FRT denotes a substation/posting, so this is where each substation's FRT is set
+// or changed. A vehicle posted here inherits this FRT (via vehicle_current_view),
+// instead of carrying its own — so swapping vehicles no longer "moves" the FRT.
+function SubstationManager({ lookups }: { lookups: LookupData }) {
+  const divisionName = (id: string) => lookups.divisions.find((division) => division.id === id)?.name ?? "—";
+  const substations = [...lookups.substations].sort(
+    (a, b) => divisionName(a.division_id).localeCompare(divisionName(b.division_id)) || a.name.localeCompare(b.name),
+  );
+
+  return (
+    <details className="group rounded-lg border border-slate-200 bg-white shadow-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Substation FRT Numbers</h2>
+            <p className="text-sm text-slate-500">FRT denotes the substation — the posted vehicle inherits it.</p>
+          </div>
+        </div>
+        <ChevronDown className="h-4 w-4 text-slate-400 transition group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="divide-y divide-slate-100 border-t border-slate-100">
+        {substations.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-slate-500 sm:px-5">No substations yet.</p>
+        ) : (
+          substations.map((substation) => (
+            <form
+              key={substation.id}
+              action={updateSubstationAction}
+              className="grid gap-3 px-4 py-3 sm:grid-cols-[1fr_1fr_10rem_auto] sm:items-end sm:px-5"
+            >
+              <input type="hidden" name="substation_id" value={substation.id} />
+              <Field label="Substation">
+                <Input name="name" defaultValue={substation.name} required />
+              </Field>
+              <div className="space-y-2">
+                <Label>Division</Label>
+                <p className="truncate py-2 text-sm text-slate-600">{divisionName(substation.division_id)}</p>
+              </div>
+              <Field label="FRT No">
+                <Input name="frt_no" placeholder="FRT 1" defaultValue={substation.frt_no ?? ""} />
+              </Field>
+              <SubmitButton variant="secondary" className="w-full sm:w-auto">Save</SubmitButton>
+            </form>
+          ))
+        )}
       </div>
     </details>
   );
