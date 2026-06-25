@@ -29,11 +29,12 @@ function locationText(vehicle: LiveVehicleStatus): string {
   return "Location unavailable";
 }
 
-// Millitrack devices carry a ready-made name ("FRT 7 SATRIKH (UP41AT8227)").
-// WheelsEye has none, so build the same shape from the VMS fields:
+// Always build the title from the VMS fields so both providers read the same:
 // "<frt> <substation> (<registration>)", falling back to whatever is present.
+// (We deliberately ignore the GPS device's own name — e.g. VehicleStep/Millitrack
+// ships a raw "FRT 7 SATRIKH (UP41AT8227)" — and rename from VMS data instead,
+// matching the detail page and the WheelsEye cards.)
 function vehicleTitle(vehicle: LiveVehicleStatus): string {
-  if (vehicle.device_name) return vehicle.device_name;
   const prefix = [vehicle.frt_no, vehicle.substation].filter(Boolean).join(" ").trim();
   return prefix ? `${prefix} (${vehicle.registration_no})` : vehicle.registration_no;
 }

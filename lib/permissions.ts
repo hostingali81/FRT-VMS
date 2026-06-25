@@ -96,15 +96,19 @@ export function canTransferVehicle(profile: UserProfile, vehicle: FleetVehicle, 
   }
 
   // Circle incharge can only move vehicles within their own circle.
-  // Division incharge cannot transfer/relocate vehicles at all.
   if (profile.role === "circle_incharge") return canSeeCircle(profile, fromCircleId, lookups);
+
+  // Division incharge can relocate vehicles within their own division (e.g. between
+  // substations). They can't move across divisions or circles: cross-circle is already
+  // excluded above, and canAccessLocation gates the destination to their division.
+  if (profile.role === "division_incharge") return canSeeDivision(profile, vehicle.division_id, lookups);
 
   return false;
 }
 
 export function canInitiateTransfer(profile: UserProfile, vehicle: FleetVehicle, lookups: LookupData) {
   if (!canSeeVehicle(profile, vehicle, lookups)) return false;
-  return ["super_admin", "zonal_manager", "circle_incharge"].includes(profile.role);
+  return ["super_admin", "zonal_manager", "circle_incharge", "division_incharge"].includes(profile.role);
 }
 
 export function canAccessLocation(profile: UserProfile, location: { circleId?: string | null; divisionId?: string | null }, lookups: LookupData) {
