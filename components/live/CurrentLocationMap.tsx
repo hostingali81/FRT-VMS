@@ -156,6 +156,33 @@ export function CurrentLocationMap({ live }: { live: LiveVehicleStatus }) {
         center: target,
       });
       markerRef.current = new maps.Marker({ map: mapRef.current, position: target, zIndex: 5, title: live.address ?? "" });
+
+      // Click listener to show "Get Direction" option
+      const infoWindow = new maps.InfoWindow();
+      markerRef.current.addListener("click", () => {
+        const currentPos = curPosRef.current || targetRef.current || target;
+        const dirUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentPos.lat},${currentPos.lng}`;
+        const label = liveRef.current.frt_no
+          ? `FRT: ${liveRef.current.frt_no} (${liveRef.current.registration_no})`
+          : liveRef.current.registration_no;
+        const address = liveRef.current.address || "Live Location";
+
+        infoWindow.setContent(`
+          <div style="padding: 6px; font-family: system-ui, -apple-system, sans-serif; min-width: 160px; max-width: 220px;">
+            <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 2px;">
+              ${label}
+            </div>
+            <div style="color: #64748b; font-size: 11px; margin-bottom: 8px; line-height: 1.3; word-wrap: break-word;">
+              ${address}
+            </div>
+            <a href="${dirUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; justify-content: center; background-color: #2563eb; color: #ffffff; padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; text-decoration: none; width: 100%; box-sizing: border-box; text-align: center; border: none; cursor: pointer;">
+              Get Direction
+            </a>
+          </div>
+        `);
+        infoWindow.open(mapRef.current, markerRef.current);
+      });
+
       curPosRef.current = target;
       targetRef.current = target;
       headingRef.current = live.course ?? 0;
