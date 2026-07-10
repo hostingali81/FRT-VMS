@@ -53,17 +53,17 @@ export const mockDivisions: Division[] = [
 ];
 
 export const mockSubstations: Substation[] = [
-  { id: "ss-naka-satrikh", name: "Naka Satrikh", division_id: "division-barabanki" },
-  { id: "ss-dewa-road", name: "Dewa Road", division_id: "division-barabanki" },
-  { id: "ss-fatehpur-town", name: "Fatehpur Town", division_id: "division-fatehpur" },
-  { id: "ss-belhara", name: "Belhara", division_id: "division-fatehpur" },
-  { id: "ss-haidergarh-town", name: "Haidergarh Town", division_id: "division-haidergarh" },
-  { id: "ss-trivediganj", name: "Trivediganj", division_id: "division-haidergarh" },
-  { id: "ss-ramnagar-rural", name: "Ramnagar Rural", division_id: "division-ramnagar" },
-  { id: "ss-mahadeva", name: "Mahadeva", division_id: "division-ramnagar" },
-  { id: "ss-ramsanehighat-town", name: "Ramsanehighat Town", division_id: "division-ramsanehighat" },
-  { id: "ss-dariyabad", name: "Dariyabad", division_id: "division-ramsanehighat" },
-  { id: "ss-alambagh", name: "Alambagh", division_id: "division-lucknow-city" },
+  { id: "ss-naka-satrikh", name: "Naka Satrikh", division_id: "division-barabanki", frt_no: "FRT 7" },
+  { id: "ss-dewa-road", name: "Dewa Road", division_id: "division-barabanki", frt_no: "FRT 10" },
+  { id: "ss-fatehpur-town", name: "Fatehpur Town", division_id: "division-fatehpur", frt_no: "FRT 30" },
+  { id: "ss-belhara", name: "Belhara", division_id: "division-fatehpur", frt_no: "FRT 35" },
+  { id: "ss-haidergarh-town", name: "Haidergarh Town", division_id: "division-haidergarh", frt_no: "FRT 23" },
+  { id: "ss-trivediganj", name: "Trivediganj", division_id: "division-haidergarh", frt_no: "FRT 22" },
+  { id: "ss-ramnagar-rural", name: "Ramnagar Rural", division_id: "division-ramnagar", frt_no: "FRT 12" },
+  { id: "ss-mahadeva", name: "Mahadeva", division_id: "division-ramnagar", frt_no: "FRT 13" },
+  { id: "ss-ramsanehighat-town", name: "Ramsanehighat Town", division_id: "division-ramsanehighat", frt_no: "FRT 40" },
+  { id: "ss-dariyabad", name: "Dariyabad", division_id: "division-ramsanehighat", frt_no: "FRT 42" },
+  { id: "ss-alambagh", name: "Alambagh", division_id: "division-lucknow-city", frt_no: "FRT 3" },
 ];
 
 export const mockLookups: LookupData = {
@@ -76,7 +76,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-ab-1245",
     registration_no: "UP32 AB 1245",
-    frt_no: null,
+    frt_no: "FRT 7",
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -108,7 +108,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-cd-8831",
     registration_no: "UP32 CD 8831",
-    frt_no: null,
+    frt_no: "FRT 30",
     vehicle_type: "Pickup",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -140,7 +140,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up41-af-5521",
     registration_no: "UP41 AF 5521",
-    frt_no: null,
+    frt_no: "FRT 22",
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -172,7 +172,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up41-gh-7712",
     registration_no: "UP41 GH 7712",
-    frt_no: null,
+    frt_no: "FRT 12",
     vehicle_type: "Scorpio",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -204,7 +204,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-jk-9088",
     registration_no: "UP32 JK 9088",
-    frt_no: null,
+    frt_no: "FRT 40",
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",
@@ -236,7 +236,7 @@ export const mockVehicles: FleetVehicle[] = [
   {
     vehicle_id: "vehicle-up32-lk-4201",
     registration_no: "UP32 LK 4201",
-    frt_no: null,
+    frt_no: "FRT 3",
     vehicle_type: "Bolero",
     fuel_type: "Diesel",
     fuel_ownership: "company",

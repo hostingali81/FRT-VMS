@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   AlertTriangle,
+  BookUser,
   CarFront,
   CircleUserRound,
   ClipboardList,
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/fuel-log", label: "Fuel Log", icon: ClipboardList },
   { href: "/gps-distance", label: "GPS Distance", icon: Route },
   { href: "/vehicle-history", label: "Vehicle History", icon: History },
+  { href: "/frt-directory", label: "FRT Directory", icon: BookUser },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/profile", label: "Profile", icon: CircleUserRound },
   { href: "/admin", label: "Admin", icon: Settings },
