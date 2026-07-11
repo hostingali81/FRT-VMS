@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { PrintToolbar } from "@/components/frt-directory/PrintToolbar";
 import { requireProfile } from "@/lib/auth";
 import { getVehicles } from "@/lib/data";
@@ -18,33 +19,40 @@ const styles = `
   .frt-table th {
     font-weight: 800;
     text-align: center;
-    font-size: 19px;
+    font-size: 17px;
     line-height: 1.15;
     background: #ffe100; /* yellow header — prints as light grey in B&W, black text stays readable */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .frt-table td { text-align: center; font-size: 19px; font-weight: 600; }
+  .frt-table td { text-align: center; font-size: 17px; font-weight: 600; }
   .frt-table td.frt-left { text-align: left; }
   .frt-inc { line-height: 1.25; font-weight: 700; }
   .frt-inc .frt-inc-div { font-weight: 800; font-size: 17px; }
   @media print {
-    /* Force A4 landscape (explicit 297×210mm) with a minimal 5mm margin. */
-    @page { size: 297mm 210mm landscape; margin: 5mm; }
+    /* Force A4 landscape (explicit 297×210mm) with an equal, minimal 6mm margin
+       on every side. */
+    @page { size: 297mm 210mm landscape; margin: 6mm; }
     html, body {
-      width: 297mm;
       background: #fff !important;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .no-print { display: none !important; }
-    /* Every division = exactly one A4 page (never split across pages). */
+    /* Every division = exactly one full A4 page (never split across pages). */
     .frt-page {
       break-before: page; page-break-before: always;
       break-inside: avoid; page-break-inside: avoid;
+      overflow: hidden;
       box-shadow: none !important; border: 0 !important; padding: 0 !important; margin: 0 !important;
     }
     .frt-page:first-of-type { break-before: auto; page-break-before: avoid; }
+    /* Fill the printable page: every row shares the page height equally (var(--rows)
+       = header + data rows for this division), so the table reaches the bottom on
+       EVERY division — equal margins, no leftover bottom gap. vh units track the
+       real printable area, so it fills whatever the print margin ends up being.
+       99.4vh keeps a hair of slack so a rounding overflow can't push a blank page. */
+    .frt-table tr { height: calc(99.4vh / var(--rows, 12)); }
     .frt-table thead { display: table-header-group; }
   }
 `;
@@ -62,16 +70,19 @@ export default async function FrtDirectoryPage() {
 
         {pages.map((page) => {
           const normalCount = page.groups.reduce((total, group) => total + group.rows.length, 0);
+          // header + all body rows — drives the equal per-row height in print.
+          const rowsCount = normalCount + (page.qrt ? 1 : 0) + 1;
+          const tableStyle = { "--rows": rowsCount } as CSSProperties;
 
           return (
             <section key={page.division} className="frt-page rounded-lg bg-white p-4 shadow-sm sm:p-5">
-              <table className="frt-table">
+              <table className="frt-table" style={tableStyle}>
                 <colgroup>
                   <col style={{ width: "5%" }} />
-                  <col style={{ width: "16%" }} />
                   <col style={{ width: "15%" }} />
-                  <col style={{ width: "20%" }} />
-                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "23%" }} />
+                  <col style={{ width: "7%" }} />
                   <col style={{ width: "18%" }} />
                   <col style={{ width: "18%" }} />
                 </colgroup>

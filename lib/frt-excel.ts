@@ -45,8 +45,16 @@ export async function buildFrtWorkbook(pages: DirPage[]): Promise<ExcelJS.Buffer
     });
     ws.columns = WIDTHS.map((width) => ({ width }));
 
+    // Fill the A4-landscape printable height (~566pt at 0.2" margins) so a sparse
+    // division (e.g. Haidergarh's 8 rows) prints as a full page just like a dense
+    // one — equal margins all around. Target slightly over the printable height so
+    // fitToHeight:1 scales it down to fill exactly (no leftover bottom margin).
+    const dataCount = page.groups.reduce((total, group) => total + group.rows.length, 0) + (page.qrt ? 1 : 0);
+    const HEADER_PT = 34;
+    const rowHeight = dataCount > 0 ? Math.max(24, (580 - HEADER_PT) / dataCount) : 28;
+
     const header = ws.addRow(HEADERS);
-    header.height = 34;
+    header.height = HEADER_PT;
     header.eachCell((cell) => {
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: YELLOW } };
       cell.font = { bold: true, size: 13, color: { argb: "FF000000" } };
@@ -69,7 +77,7 @@ export async function buildFrtWorkbook(pages: DirPage[]): Promise<ExcelJS.Buffer
           row.vehicle,
           row.frtMobile,
         ]);
-        xr.height = 28;
+        xr.height = rowHeight;
         styleRow(xr);
         r += 1;
       }
@@ -95,7 +103,7 @@ export async function buildFrtWorkbook(pages: DirPage[]): Promise<ExcelJS.Buffer
     let lastUsed = lastNormal;
     if (page.qrt) {
       const xr = ws.addRow([page.qrt.srNo, page.qrt.label, null, null, page.qrt.frtVan, page.qrt.vehicle, page.qrt.frtMobile]);
-      xr.height = 28;
+      xr.height = rowHeight;
       styleRow(xr);
       const i = xr.number;
       ws.mergeCells(i, 2, i, 4); // "FRT Van For QRT Team" spans Division→Sub Station
