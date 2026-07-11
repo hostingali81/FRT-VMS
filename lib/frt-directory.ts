@@ -95,3 +95,80 @@ export function formatMobile(mobile: string): string {
   if (digits.length !== 10) return mobile;
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
+
+// ── Shared, print-ready page structure ───────────────────────────────────────
+// Both the printable HTML page and the Excel export build from this, so the PDF
+// and the spreadsheet are identical.
+export type DirRow = { frtNo: number; srNo: number; subStation: string; frtVan: string; vehicle: string; frtMobile: string };
+export type DirGroup = { subDivision: string; rows: DirRow[] };
+export type DirQrt = { frtNo: number; srNo: number; label: string; frtVan: string; vehicle: string; frtMobile: string };
+export type DirPage = { division: string; groups: DirGroup[]; qrt?: DirQrt };
+
+/** Map each FRT number to the registration(s) of the vehicle(s) currently posted there. */
+export function buildRegByFrt(
+  vehicles: Array<{ status: string; frt_no: string | null; registration_no: string }>,
+): Map<number, string[]> {
+  const map = new Map<number, string[]>();
+  for (const vehicle of vehicles) {
+    if (vehicle.status === "removed") continue;
+    const frt = parseFrtNo(vehicle.frt_no);
+    if (frt == null) continue;
+    const reg = vehicle.registration_no.replace(/\s+/g, "").toUpperCase();
+    const list = map.get(frt) ?? [];
+    list.push(reg);
+    map.set(frt, list);
+  }
+  return map;
+}
+
+/** Build the per-division pages (grouped by sub-division, QRT row separated). */
+export function buildDirectoryPages(regByFrt: Map<number, string[]>): DirPage[] {
+  const vehicleFor = (frt: number) => (regByFrt.get(frt) ?? []).join(", ") || "—";
+
+  const order: string[] = [];
+  const byDivision = new Map<string, FrtDirectoryEntry[]>();
+  for (const entry of FRT_DIRECTORY) {
+    if (!byDivision.has(entry.division)) {
+      byDivision.set(entry.division, []);
+      order.push(entry.division);
+    }
+    byDivision.get(entry.division)!.push(entry);
+  }
+
+  return order.map((division) => {
+    const entries = byDivision.get(division)!;
+    const qrtEntry = entries.find((entry) => entry.qrt);
+    const normals = entries.filter((entry) => !entry.qrt);
+
+    const groups: DirGroup[] = [];
+    let sr = 0;
+    for (const entry of normals) {
+      sr += 1;
+      const row: DirRow = {
+        frtNo: entry.frtNo,
+        srNo: sr,
+        subStation: entry.substation,
+        frtVan: `FRT ${entry.frtNo}`,
+        vehicle: vehicleFor(entry.frtNo),
+        frtMobile: formatMobile(entry.mobile),
+      };
+      const key = entry.subDivision ?? "";
+      const last = groups[groups.length - 1];
+      if (last && last.subDivision === key) last.rows.push(row);
+      else groups.push({ subDivision: key, rows: [row] });
+    }
+
+    const page: DirPage = { division, groups };
+    if (qrtEntry) {
+      page.qrt = {
+        frtNo: qrtEntry.frtNo,
+        srNo: qrtEntry.frtNo,
+        label: qrtEntry.substation,
+        frtVan: `FRT ${qrtEntry.frtNo}`,
+        vehicle: vehicleFor(qrtEntry.frtNo),
+        frtMobile: formatMobile(qrtEntry.mobile),
+      };
+    }
+    return page;
+  });
+}

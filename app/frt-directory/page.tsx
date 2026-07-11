@@ -1,19 +1,15 @@
 import { PrintToolbar } from "@/components/frt-directory/PrintToolbar";
 import { requireProfile } from "@/lib/auth";
 import { getVehicles } from "@/lib/data";
-import {
-  FRT_DIRECTORY,
-  type FrtDirectoryEntry,
-  formatMobile,
-  parseFrtNo,
-} from "@/lib/frt-directory";
+import { buildDirectoryPages, buildRegByFrt } from "@/lib/frt-directory";
 
 export const dynamic = "force-dynamic";
 
 // Printable FRT directory — one page per division, a faithful copy of the paper
-// sheet: Sr. No | Division Incharge | Sub Division | Sub Station | FRT Van |
-// Vehicle Number | FRT Mobile No. FRT/substation/mobile are fixed; only the
-// vehicle number is mapped live from the DB by FRT number.
+// sheet: Sr. No | Division | Sub Division | Sub Station | FRT Van | Vehicle Number
+// | FRT Mobile No. FRT/substation/mobile are fixed; only the vehicle number is
+// mapped live from the DB by FRT number. The Excel export (/frt-directory/export)
+// is built from the same data so PDF and spreadsheet match.
 
 const styles = `
   .frt-doc { font-family: Arial, Helvetica, sans-serif; color: #000; }
@@ -32,8 +28,6 @@ const styles = `
   .frt-table td.frt-left { text-align: left; }
   .frt-inc { line-height: 1.25; font-weight: 700; }
   .frt-inc .frt-inc-div { font-weight: 800; font-size: 17px; }
-  .frt-inc .frt-inc-name { font-weight: 600; }
-  .frt-inc .frt-inc-mob { white-space: nowrap; font-weight: 600; }
   @media print {
     /* Force A4 landscape (explicit 297×210mm) with a minimal 5mm margin. */
     @page { size: 297mm 210mm landscape; margin: 5mm; }
@@ -55,41 +49,10 @@ const styles = `
   }
 `;
 
-type NormalRow = {
-  entry: FrtDirectoryEntry;
-  srNo: number;
-  subDivision: string;
-  isGroupFirst: boolean;
-  groupSize: number;
-};
-
 export default async function FrtDirectoryPage() {
   await requireProfile();
   const vehicles = await getVehicles();
-
-  // Vehicle registration(s) currently posted at each FRT number.
-  const regByFrt = new Map<number, string[]>();
-  for (const vehicle of vehicles) {
-    if (vehicle.status === "removed") continue;
-    const frt = parseFrtNo(vehicle.frt_no);
-    if (frt == null) continue;
-    const reg = vehicle.registration_no.replace(/\s+/g, "").toUpperCase();
-    const list = regByFrt.get(frt) ?? [];
-    list.push(reg);
-    regByFrt.set(frt, list);
-  }
-  const vehicleFor = (frt: number) => (regByFrt.get(frt) ?? []).join(", ") || "—";
-
-  // Group the fixed directory by division, preserving FRT order.
-  const order: string[] = [];
-  const byDivision = new Map<string, FrtDirectoryEntry[]>();
-  for (const entry of FRT_DIRECTORY) {
-    if (!byDivision.has(entry.division)) {
-      byDivision.set(entry.division, []);
-      order.push(entry.division);
-    }
-    byDivision.get(entry.division)!.push(entry);
-  }
+  const pages = buildDirectoryPages(buildRegByFrt(vehicles));
 
   return (
     <div className="frt-doc min-h-screen bg-slate-100 px-4 py-6 sm:px-6 print:bg-white print:p-0">
@@ -97,37 +60,11 @@ export default async function FrtDirectoryPage() {
       <div className="mx-auto max-w-6xl space-y-6 print:max-w-none print:space-y-0">
         <PrintToolbar />
 
-        {order.map((division) => {
-          const entries = byDivision.get(division)!;
-          const qrtEntry = entries.find((entry) => entry.qrt);
-          const normals = entries.filter((entry) => !entry.qrt);
-
-          // Consecutive sub-division groups among the normal rows.
-          const groups: { sub: string; rows: FrtDirectoryEntry[] }[] = [];
-          for (const entry of normals) {
-            const key = entry.subDivision ?? "";
-            const last = groups[groups.length - 1];
-            if (last && last.sub === key) last.rows.push(entry);
-            else groups.push({ sub: key, rows: [entry] });
-          }
-          const showSub = groups.some((group) => group.sub !== "");
-
-          let sr = 0;
-          const rows: NormalRow[] = groups.flatMap((group) =>
-            group.rows.map((entry, index) => {
-              sr += 1;
-              return {
-                entry,
-                srNo: sr,
-                subDivision: group.sub,
-                isGroupFirst: index === 0,
-                groupSize: group.rows.length,
-              };
-            }),
-          );
+        {pages.map((page) => {
+          const normalCount = page.groups.reduce((total, group) => total + group.rows.length, 0);
 
           return (
-            <section key={division} className="frt-page rounded-lg bg-white p-4 shadow-sm sm:p-5">
+            <section key={page.division} className="frt-page rounded-lg bg-white p-4 shadow-sm sm:p-5">
               <table className="frt-table">
                 <colgroup>
                   <col style={{ width: "5%" }} />
@@ -150,32 +87,30 @@ export default async function FrtDirectoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={row.entry.frtNo}>
-                      <td>{row.srNo}</td>
-                      {index === 0 && (
-                        <td rowSpan={rows.length} className="frt-inc">
-                          <div className="frt-inc-div">{division.toUpperCase()}</div>
-                        </td>
-                      )}
-                      {showSub
-                        ? row.isGroupFirst && (
-                            <td rowSpan={row.groupSize}>{row.subDivision || "—"}</td>
-                          )
-                        : index === 0 && <td rowSpan={rows.length} />}
-                      <td className="frt-left">{row.entry.substation}</td>
-                      <td>FRT {row.entry.frtNo}</td>
-                      <td>{vehicleFor(row.entry.frtNo)}</td>
-                      <td>{formatMobile(row.entry.mobile)}</td>
-                    </tr>
-                  ))}
-                  {qrtEntry && (
+                  {page.groups.map((group, groupIndex) =>
+                    group.rows.map((row, rowIndex) => (
+                      <tr key={row.frtNo}>
+                        <td>{row.srNo}</td>
+                        {groupIndex === 0 && rowIndex === 0 && (
+                          <td rowSpan={normalCount} className="frt-inc">
+                            <div className="frt-inc-div">{page.division.toUpperCase()}</div>
+                          </td>
+                        )}
+                        {rowIndex === 0 && <td rowSpan={group.rows.length}>{group.subDivision || "—"}</td>}
+                        <td className="frt-left">{row.subStation}</td>
+                        <td>{row.frtVan}</td>
+                        <td>{row.vehicle}</td>
+                        <td>{row.frtMobile}</td>
+                      </tr>
+                    )),
+                  )}
+                  {page.qrt && (
                     <tr>
-                      <td>{qrtEntry.frtNo}</td>
-                      <td colSpan={3}>{qrtEntry.substation}</td>
-                      <td>FRT {qrtEntry.frtNo}</td>
-                      <td>{vehicleFor(qrtEntry.frtNo)}</td>
-                      <td>{formatMobile(qrtEntry.mobile)}</td>
+                      <td>{page.qrt.srNo}</td>
+                      <td colSpan={3}>{page.qrt.label}</td>
+                      <td>{page.qrt.frtVan}</td>
+                      <td>{page.qrt.vehicle}</td>
+                      <td>{page.qrt.frtMobile}</td>
                     </tr>
                   )}
                 </tbody>
