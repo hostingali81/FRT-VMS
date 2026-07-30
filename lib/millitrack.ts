@@ -105,13 +105,15 @@ async function getUserId(): Promise<number> {
 /**
  * Fetch a Millitrack API path with the JWT attached. On a 401/403 (token rejected)
  * it re-logs in once and retries — unless a fixed MT_TOKEN is in use, which we
- * can't refresh.
+ * can't refresh. Pass `init` for the write calls (see renameMillitrackDevice);
+ * everything else is a plain GET.
  */
-async function authedFetch(path: string): Promise<Response> {
+async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = await getToken();
   const doFetch = (t: string) =>
     fetch(`${BASE}${path}`, {
-      headers: { Accept: "application/json", "x-auth-token": t },
+      ...init,
+      headers: { Accept: "application/json", "x-auth-token": t, ...((init?.headers as Record<string, string>) ?? {}) },
       cache: "no-store",
     });
 
@@ -128,6 +130,10 @@ export type Device = {
   name?: string;
   uniqueId?: string;
   status?: string;
+  /** "truck" | "car" | "bus" | "motorcycle" | "pickup" | … — must be preserved on rename. */
+  category?: string | null;
+  /** Driver phone number, set per device on the platform — must be preserved on rename. */
+  contact?: string | null;
 };
 
 export type SummaryRow = {
@@ -175,6 +181,43 @@ export async function getDevices(): Promise<Device[]> {
     throw new Error(`Millitrack devices failed (${res.status}): ${body.slice(0, 160)}`);
   }
   return (await res.json()) as Device[];
+}
+
+/**
+ * Rename a device (its display name — whose first token is the plate).
+ *
+ * The web dashboard has no edit option and Traccar's own PUT /api/devices/{id} is
+ * not what the platform uses; the Android app calls this endpoint instead, with the
+ * same JWT our reads use. THIS IS THE ONLY WRITE CALL WE MAKE TO A GPS PROVIDER.
+ *
+ * Pass the device as returned by getDevices(): `category` and `contact` are plain
+ * fields on the request, so whatever we send replaces what's on the platform —
+ * echoing the device's current values keeps them intact (a blank contact would wipe
+ * a driver's number). `attributes`/`attributesToRemove` are a merge/remove pair, so
+ * empty ones leave existing attributes alone.
+ */
+export async function renameMillitrackDevice(device: Device, name: string): Promise<Device> {
+  const res = await authedFetch(`/api/android/deviceUpdateAttributesByEndUser?dc=${Date.now()}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: device.id,
+      name,
+      category: device.category ?? "default",
+      contact: device.contact ?? "",
+      attributes: {},
+      attributesToRemove: [],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Rename failed (${res.status}): ${body.slice(0, 160)}`);
+  }
+
+  const updated = (await res.json()) as Device;
+  // The platform echoes the saved device back — trust that, not our request.
+  if (updated?.name !== name) throw new Error(`Rename not applied (server kept "${updated?.name ?? "?"}")`);
+  return updated;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, Tag } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { LinkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -23,6 +23,12 @@ export default async function VehiclesPage() {
   return (
     <AppShell profile={profile}>
       <PageHeader title="Vehicles" eyebrow="Vehicle master and deployment">
+        {profile.role === "super_admin" ? (
+          <LinkButton href="/vehicles/gps-names" variant="secondary">
+            <Tag className="h-4 w-4" aria-hidden="true" />
+            GPS Names
+          </LinkButton>
+        ) : null}
         {canCreateVehicle(profile) ? (
           <LinkButton href="/vehicles/new">
             <Plus className="h-4 w-4" aria-hidden="true" />
