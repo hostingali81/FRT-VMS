@@ -18,6 +18,13 @@
  * (sanitizedDistance), reverse-geocoded address, ignition, mode and lat/lng — i.e.
  * the same figures the WheelsEye dashboard shows.
  *
+ * Matching a VMS vehicle to a WheelsEye one: the vehicle's gps_device_id holds that
+ * static vehicleId, and it is the primary key we join on. Registration is only a
+ * fallback, because the two drift apart in practice — when a device is moved into
+ * another truck, WheelsEye keeps labelling it with the registration it was first
+ * installed under until someone renames it there. The results are therefore keyed
+ * both ways (byId / byReg); callers should prefer byId.
+ *
  * Distance (cron) still comes from the report API (wheelsEyeDistanceByReg).
  */
 
@@ -260,6 +267,31 @@ export async function wheelsEyeVehicleIdForReg(reg: string): Promise<number | nu
   return null;
 }
 
+/**
+ * A vehicle's stored gps_device_id as a WheelsEye vehicleId, or null if it isn't a
+ * plain number. This is the id every WheelsEye endpoint here is keyed by.
+ */
+export function parseWheelsEyeVehicleId(deviceId: string | number | null | undefined): number | null {
+  const raw = String(deviceId ?? "").trim();
+  if (!/^\d+$/.test(raw)) return null;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/**
+ * The key a vehicle's row carries in wheelsEyeDistanceByReg: the registration
+ * WheelsEye itself holds for the mapped vehicleId, falling back to ours. The two
+ * differ once a device is moved to another vehicle and nobody renamed it there.
+ */
+export async function wheelsEyeDistanceKey(
+  deviceId: string | number | null | undefined,
+  registration: string,
+): Promise<string> {
+  const id = parseWheelsEyeVehicleId(deviceId);
+  const weReg = id == null ? null : (await fetchStaticFleet()).get(id);
+  return normReg(weReg ?? registration);
+}
+
 /** Travelled route + stops for a WheelsEye vehicle over [fromSec, toSec] (Unix seconds). */
 export async function wheelsEyeRoute(vehicleId: number, fromSec: number, toSec: number): Promise<ProviderRoute> {
   const [pathJson, itinJson] = await Promise.all([
@@ -421,34 +453,53 @@ async function fetchDynamic(ids: number[]): Promise<Map<number, DynamicVehicle>>
   return out;
 }
 
+/** A VMS vehicle to look up: its mapped WheelsEye vehicleId and/or its registration. */
+export type WheelsEyeTarget = { deviceId?: string | number | null; registration?: string | null };
+
+/** Live telemetry indexed both ways, so callers can join by id first (see file header). */
+export type WheelsEyeLiveFeed = {
+  byId: Map<number, WheelsEyeLiveState>;
+  byReg: Map<string, WheelsEyeLiveState>; // key: normalized registration (UPPER, no spaces/dashes)
+};
+
+const emptyFeed = (): WheelsEyeLiveFeed => ({ byId: new Map(), byReg: new Map() });
+
 /**
- * Live telemetry for WheelsEye vehicles, keyed by normalized registration (UPPER,
- * no spaces/dashes) for joining to VMS vehicles. Returns speed, today's km, address,
- * ignition and position — the same figures the WheelsEye dashboard shows. Vehicles
- * with no live telemetry are omitted.
+ * Live telemetry for WheelsEye vehicles: speed, today's km, address, ignition and
+ * position — the same figures the WheelsEye dashboard shows. Vehicles with no live
+ * telemetry are omitted.
  *
- * Pass `regs` to fetch only the vehicles the caller can actually see (the /live page
- * passes its permission-filtered set): we then hit `vehicles-dynamic` for just those
- * ids instead of the whole account. Omit it to cover every vehicle on the account.
- * Telemetry is served from a short per-id cache, so only stale/missing ids are fetched.
+ * Pass `targets` to fetch only the vehicles the caller can actually see (the /live
+ * page passes its permission-filtered set): we then hit `vehicles-dynamic` for just
+ * those ids instead of the whole account. A target contributes its vehicleId and its
+ * registration, so a vehicle still resolves through whichever of the two matches.
+ * Omit it to cover every vehicle on the account. Telemetry is served from a short
+ * per-id cache, so only stale/missing ids are fetched.
  */
 export async function getWheelsEyeLiveState(
-  regs?: Iterable<string> | null,
-): Promise<Map<string, WheelsEyeLiveState>> {
+  targets?: Iterable<WheelsEyeTarget> | null,
+): Promise<WheelsEyeLiveFeed> {
   const idToReg = await fetchStaticFleet();
-  if (!idToReg.size) return new Map();
+  if (!idToReg.size) return emptyFeed();
 
-  // Resolve which ids we need: the caller's visible regs, or the whole account.
+  // Resolve which ids we need: the caller's vehicles, or the whole account.
   let neededIds: number[];
-  if (regs) {
-    const want = new Set<string>();
-    for (const r of Array.from(regs)) want.add(normReg(r));
+  if (targets) {
+    const wantIds = new Set<number>();
+    const wantRegs = new Set<string>();
+    for (const t of Array.from(targets)) {
+      const id = parseWheelsEyeVehicleId(t.deviceId);
+      if (id != null) wantIds.add(id);
+      if (t.registration) wantRegs.add(normReg(t.registration));
+    }
     neededIds = [];
-    for (const [id, reg] of Array.from(idToReg)) if (want.has(normReg(reg))) neededIds.push(id);
+    for (const [id, reg] of Array.from(idToReg)) {
+      if (wantIds.has(id) || wantRegs.has(normReg(reg))) neededIds.push(id);
+    }
   } else {
     neededIds = Array.from(idToReg.keys());
   }
-  if (!neededIds.length) return new Map();
+  if (!neededIds.length) return emptyFeed();
 
   // Only fetch ids whose cached telemetry is missing or past its TTL.
   const now = Date.now();
@@ -474,7 +525,7 @@ export async function getWheelsEyeLiveState(
   }
 
   const round1 = (n: number) => Math.round(n * 10) / 10;
-  const map = new Map<string, WheelsEyeLiveState>();
+  const feed = emptyFeed();
   for (const id of neededIds) {
     const reg = idToReg.get(id);
     const entry = dynamicCache.get(id);
@@ -483,7 +534,7 @@ export async function getWheelsEyeLiveState(
     const speed = fin(d.speed);
     const km = fin(d.sanitizedDistance);
     const t = fin(d.time);
-    map.set(normReg(reg), {
+    const state: WheelsEyeLiveState = {
       vehicleId: id,
       registration: reg,
       status: deriveStatus(d.mode, d.ignitionState),
@@ -496,7 +547,9 @@ export async function getWheelsEyeLiveState(
       course: fin(d.angle),
       todayDistanceKm: km == null ? null : round1(km),
       lastUpdate: t == null ? null : new Date(t * 1000).toISOString(),
-    });
+    };
+    feed.byId.set(id, state);
+    feed.byReg.set(normReg(reg), state);
   }
-  return map;
+  return feed;
 }

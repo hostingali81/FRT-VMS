@@ -6,7 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getVehicles } from "@/lib/data";
 import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
 import { isMillitrackConfigured, millitrackSummary } from "@/lib/millitrack";
-import { isWheelsEyeConfigured, wheelsEyeDistanceByReg } from "@/lib/wheelseye";
+import { isWheelsEyeConfigured, wheelsEyeDistanceByReg, wheelsEyeDistanceKey } from "@/lib/wheelseye";
 import { syncFuelSegmentDistances, syncMonthlyGpsDistance } from "@/lib/gps-distance";
 
 /**
@@ -54,8 +54,6 @@ export async function syncGpsMonthlyDistanceAction() {
       `&segments=${seg.segments}&from=${encodeURIComponent(result.from ?? "")}&to=${encodeURIComponent(result.to ?? "")}`,
   );
 }
-
-const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // India is UTC+5:30. The provider summary endpoints cap how long a single window
 // can be: a range longer than ~1 month returns HTTP 400 "Time period exceeds the
@@ -143,11 +141,15 @@ export async function getVehicleGpsDistanceAction(input: {
     if (vehicle.gps_company === "WheelsEye") {
       if (!isWheelsEyeConfigured()) return { ok: false, error: "GPS provider (WheelsEye) abhi configured nahi hai." };
 
+      // Report rows are keyed by WheelsEye's own registration for the mapped
+      // device, which can differ from ours after a device swap.
+      const reportKey = await wheelsEyeDistanceKey(vehicle.gps_device_id, vehicle.registration_no);
+
       let km = 0;
       let hasData = false;
       for (const w of windows) {
         const kmByReg = await wheelsEyeDistanceByReg(Math.floor(w.fromMs / 1000), Math.floor(w.toMs / 1000));
-        const part = kmByReg.get(normReg(vehicle.registration_no));
+        const part = kmByReg.get(reportKey);
         if (part != null) {
           km += part;
           hasData = true;

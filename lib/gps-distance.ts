@@ -1,7 +1,7 @@
 // Server-only module: imported solely by server actions and the cron route handler.
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { isMillitrackConfigured, millitrackSummary } from "@/lib/millitrack";
-import { isWheelsEyeConfigured, wheelsEyeDistanceByReg } from "@/lib/wheelseye";
+import { isWheelsEyeConfigured, wheelsEyeDistanceByReg, wheelsEyeDistanceKey } from "@/lib/wheelseye";
 
 /**
  * Standalone monthly GPS distance sync — independent of fuel logs.
@@ -33,7 +33,6 @@ export type MonthlySyncResult = {
 };
 
 const ymOf = (year: number, monthIdx: number) => `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
-const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // India is UTC+5:30. Months are treated as IST calendar months so "month start"
 // is 00:00 IST (not 05:30 IST, which a UTC boundary would produce).
@@ -122,7 +121,9 @@ export async function syncMonthlyGpsDistance(
       try {
         const kmByReg = await wheelsEyeDistanceByReg(fromSec, toSec);
         for (const v of wheelseye) {
-          const km = kmByReg.get(normReg(v.registration_no));
+          // Report rows are keyed by WheelsEye's own registration for the mapped
+          // device, which can differ from ours after a device swap.
+          const km = kmByReg.get(await wheelsEyeDistanceKey(v.gps_device_id, v.registration_no));
           if (km == null) {
             failed += 1;
             continue;
@@ -213,7 +214,7 @@ async function segmentDistanceKm(
     let km = 0;
     for (const w of windows) {
       const byReg = await wheelsEyeDistanceByReg(Math.floor(w.fromMs / 1000), Math.floor(w.toMs / 1000));
-      km += byReg.get(normReg(vehicle.registration_no)) ?? 0;
+      km += byReg.get(await wheelsEyeDistanceKey(vehicle.gps_device_id, vehicle.registration_no)) ?? 0;
     }
     return km;
   }

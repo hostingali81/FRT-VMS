@@ -3,7 +3,12 @@
 // and the route page. Permission-scoped via getVehicles (same as the live feed).
 import { getVehicles } from "@/lib/data";
 import { isMillitrackConfigured, millitrackRoute } from "@/lib/millitrack";
-import { isWheelsEyeConfigured, wheelsEyeRoute, wheelsEyeVehicleIdForReg } from "@/lib/wheelseye";
+import {
+  isWheelsEyeConfigured,
+  parseWheelsEyeVehicleId,
+  wheelsEyeRoute,
+  wheelsEyeVehicleIdForReg,
+} from "@/lib/wheelseye";
 import type { FleetVehicle, UserProfile, VehicleRoute } from "@/lib/types";
 
 // Mirrors VehicleLiveCard's title: "<frt> <substation> (<registration>)".
@@ -55,7 +60,11 @@ export async function getVehicleRoute(
   try {
     if (vehicle.gps_company === "WheelsEye") {
       if (!isWheelsEyeConfigured()) throw new Error("WheelsEye GPS is not configured.");
-      const id = await wheelsEyeVehicleIdForReg(vehicle.registration_no);
+      // The mapped vehicleId wins; registration is only a fallback for vehicles
+      // that were never given one (WheelsEye keeps the old registration on a
+      // device after it is moved to another vehicle).
+      const id =
+        parseWheelsEyeVehicleId(vehicle.gps_device_id) ?? (await wheelsEyeVehicleIdForReg(vehicle.registration_no));
       if (id == null) throw new Error("This vehicle isn't linked on WheelsEye.");
       const route = await wheelsEyeRoute(id, Math.floor(Date.parse(fromISO) / 1000), Math.floor(Date.parse(toISO) / 1000));
       return { ok: true, provider, vehicle: meta, ...route, fromISO, toISO };

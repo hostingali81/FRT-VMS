@@ -2,7 +2,13 @@
 // permission-filtered VMS vehicles. Imported by the /live page and its refresh action.
 import { getVehicles } from "@/lib/data";
 import { getFleetLiveState, isMillitrackConfigured, type LiveDeviceState } from "@/lib/millitrack";
-import { getWheelsEyeLiveState, isWheelsEyeConfigured, type WheelsEyeLiveState } from "@/lib/wheelseye";
+import {
+  getWheelsEyeLiveState,
+  isWheelsEyeConfigured,
+  parseWheelsEyeVehicleId,
+  type WheelsEyeLiveFeed,
+  type WheelsEyeLiveState,
+} from "@/lib/wheelseye";
 import type {
   FleetLiveCounts,
   FleetLiveStatus,
@@ -45,6 +51,20 @@ const frtRank = (frt_no: string | null) => {
 const normReg = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const isMtVehicle = (v: FleetVehicle) =>
   v.gps_company === "VehicleStep" && /^\d+$/.test(String(v.gps_device_id ?? "").trim());
+
+const weTarget = (v: FleetVehicle) => ({ deviceId: v.gps_device_id, registration: v.registration_no });
+
+/**
+ * Pick a vehicle's WheelsEye record: by its mapped vehicleId first, registration
+ * only as a fallback. The two disagree once a device is moved to another vehicle —
+ * WheelsEye keeps the old registration on it, so only the id points at the truck
+ * the device is actually fitted to now.
+ */
+function weDevice(feed: WheelsEyeLiveFeed | null, v: FleetVehicle): WheelsEyeLiveState | undefined {
+  if (!feed) return undefined;
+  const id = parseWheelsEyeVehicleId(v.gps_device_id);
+  return (id != null ? feed.byId.get(id) : undefined) ?? feed.byReg.get(normReg(v.registration_no));
+}
 
 function baseFields(v: FleetVehicle) {
   return {
@@ -112,7 +132,7 @@ function weItem(v: FleetVehicle, dev: WheelsEyeLiveState): LiveVehicleStatus {
  * Live snapshot for the caller's vehicles, across both GPS providers.
  * Permission-scoped: only vehicles the profile can see (via getVehicles) are
  * joined to the live feeds, and the bucket counts are computed over that visible
- * subset. Millitrack vehicles join by device id, WheelsEye by registration.
+ * subset. Both providers join by device id (WheelsEye falls back to registration).
  * Providers are fetched independently — one failing doesn't drop the other.
  */
 export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<FleetLiveStatus> {
@@ -126,16 +146,18 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
 
   const vehicles = (await getVehicles(profile)).filter((v) => v.status !== "removed");
   const mtVehicles = vehicles.filter(isMtVehicle);
-  const weVehicles = vehicles.filter((v) => v.gps_company === "WheelsEye" && v.registration_no);
+  const weVehicles = vehicles.filter(
+    (v) => v.gps_company === "WheelsEye" && (parseWheelsEyeVehicleId(v.gps_device_id) != null || v.registration_no),
+  );
 
   const needMt = mtVehicles.length > 0 && mtConfigured;
   const needWe = weVehicles.length > 0 && weConfigured;
 
   const [mtSettled, weSettled] = await Promise.allSettled([
     needMt ? getFleetLiveState() : Promise.resolve(null),
-    // Only fetch telemetry for the registrations this profile can see, not the
-    // whole WheelsEye account.
-    needWe ? getWheelsEyeLiveState(weVehicles.map((v) => v.registration_no)) : Promise.resolve(null),
+    // Only fetch telemetry for the vehicles this profile can see, not the whole
+    // WheelsEye account.
+    needWe ? getWheelsEyeLiveState(weVehicles.map(weTarget)) : Promise.resolve(null),
   ]);
 
   const errors: string[] = [];
@@ -158,9 +180,9 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
     items.push(mtItem(v, dev));
   }
 
-  // ── WheelsEye (join by registration) ──
+  // ── WheelsEye (join by device id, registration as fallback) ──
   for (const v of weVehicles) {
-    const dev = weState?.get(normReg(v.registration_no));
+    const dev = weDevice(weState, v);
     if (!dev) {
       if (needWe) untracked += 1;
       continue;
@@ -195,7 +217,7 @@ export async function getFleetLiveStatus(profile?: UserProfile | null): Promise<
  * Current/last live position for ONE of the caller's vehicles — backs the
  * default view of /live/[vehicleId] (shown before any route is requested).
  * Permission-scoped via getVehicles. Hits only the provider this vehicle uses:
- * Millitrack's fleet state (one bulk call) or a single-registration WheelsEye
+ * Millitrack's fleet state (one bulk call) or a single-vehicle WheelsEye
  * lookup. `live: null` means the vehicle is mapped but isn't reporting right now.
  */
 export async function getVehicleLiveStatus(
@@ -235,8 +257,8 @@ export async function getVehicleLiveStatus(
   try {
     if (v.gps_company === "WheelsEye") {
       if (!weConfigured) throw new Error("WheelsEye GPS is not configured.");
-      const state = await getWheelsEyeLiveState([v.registration_no]);
-      const dev = state.get(normReg(v.registration_no));
+      const state = await getWheelsEyeLiveState([weTarget(v)]);
+      const dev = weDevice(state, v);
       return { ok: true, configured, vehicle: meta, live: dev ? weItem(v, dev) : null, fetchedAt };
     }
 
