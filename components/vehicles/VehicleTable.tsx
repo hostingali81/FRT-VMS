@@ -32,7 +32,7 @@ export function VehicleTable({
   const [circleId, setCircleId] = useState("");
   const [divisionId, setDivisionId] = useState("");
   const [substationId, setSubstationId] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("active");
   const [vendor, setVendor] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
 

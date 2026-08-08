@@ -602,12 +602,14 @@ export async function getAlertsData(profile?: UserProfile | null) {
   const [vehicles, drivers] = await Promise.all([getVehicles(profile), getDrivers(profile)]);
 
   const documentAlerts = vehicles.filter((vehicle) =>
+    vehicle.status === "active" &&
     ["expiring", "expired"].includes(
       getWorstDocumentState([vehicle.insurance_expiry, vehicle.fitness_expiry, vehicle.pollution_expiry]),
     ),
   );
 
   const driverLicenseAlerts = drivers.filter((driver) =>
+    driver.status === "active" &&
     ["expiring", "expired"].includes(getWorstDocumentState([driver.license_expiry])),
   );
 
