@@ -55,6 +55,16 @@ npm run rto:refresh -- --dry  # preview changes without writing
 
 (Runs locally due to Cloudflare blocking from Vercel IPs)
 
+## Public API
+
+Open, read-only JSON endpoints (no login or key) — see [docs/public-api.md](docs/public-api.md):
+
+```bash
+# Production base URL: https://frtvms.vercel.app  (local dev: http://localhost:3000)
+curl "https://frtvms.vercel.app/api/public/gps-names?provider=WheelsEye"  # device id / vehicle no -> "FRT 9 CHANDAULI (UP32PN7247)"
+curl "https://frtvms.vercel.app/api/public/vehicles"                      # fleet deployment + GPS + vendor fields
+```
+
 ## Verification
 
 ```bash
