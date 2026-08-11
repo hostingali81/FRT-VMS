@@ -11,6 +11,8 @@ Both are `Cache-Control: no-store`, so every hit returns live VMS data.
 | Production | `https://frtvms.vercel.app` |
 | Local dev | `http://localhost:3000` (`npm run dev`) |
 
+This page itself is served publicly at <https://frtvms.vercel.app/api/public/docs>.
+
 Paste-ready live links:
 
 - <https://frtvms.vercel.app/api/public/gps-names?provider=VehicleStep>
