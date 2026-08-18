@@ -7,8 +7,10 @@ import type { DirPage } from "@/lib/frt-directory";
 // so the sheet prints identically to the PDF straight from Excel.
 
 const HEADERS = ["Sr. No", "DIVISION", "SUB DIVISION", "SUB STATION", "FRT VAN", "Vehicle Number", "FRT Mobile No"];
-// Column widths (Excel character units) mirroring the PDF column proportions.
-const WIDTHS = [7, 22, 20, 28, 12, 24, 24];
+// Column widths (Excel character units) mirroring the PDF column proportions —
+// short columns trimmed to their content so SUB STATION gets the space.
+const WIDTHS = [6, 22, 20, 37, 11, 19, 19];
+const BODY_PT = 15; // one size for every cell, matching the 21px type in the PDF
 const YELLOW = "FFFFE100";
 const THIN = { style: "thin" as const, color: { argb: "FF000000" } };
 const BORDER = { top: THIN, left: THIN, bottom: THIN, right: THIN };
@@ -21,7 +23,7 @@ function sheetName(name: string): string {
 function styleRow(row: ExcelJS.Row): void {
   row.eachCell({ includeEmpty: true }, (cell, col) => {
     cell.border = BORDER;
-    if (!cell.font) cell.font = { size: 13 };
+    if (!cell.font) cell.font = { bold: true, size: BODY_PT };
     cell.alignment = { horizontal: col === 4 ? "left" : "center", vertical: "middle", wrapText: true };
   });
 }
@@ -57,7 +59,7 @@ export async function buildFrtWorkbook(pages: DirPage[]): Promise<ExcelJS.Buffer
     header.height = HEADER_PT;
     header.eachCell((cell) => {
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: YELLOW } };
-      cell.font = { bold: true, size: 13, color: { argb: "FF000000" } };
+      cell.font = { bold: true, size: BODY_PT, color: { argb: "FF000000" } };
       cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
       cell.border = BORDER;
     });
@@ -89,14 +91,14 @@ export async function buildFrtWorkbook(pages: DirPage[]): Promise<ExcelJS.Buffer
     if (lastNormal >= firstRow) {
       ws.mergeCells(firstRow, 2, lastNormal, 2);
       const cell = ws.getCell(firstRow, 2);
-      cell.font = { bold: true, size: 14 };
+      cell.font = { bold: true, size: BODY_PT };
       cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     }
     // Merge each SUB DIVISION group.
     for (const [start, end] of groupRanges) {
       if (end > start) ws.mergeCells(start, 3, end, 3);
       const cell = ws.getCell(start, 3);
-      cell.font = { bold: false, size: 13 };
+      cell.font = { bold: true, size: BODY_PT };
       cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     }
 
@@ -108,7 +110,7 @@ export async function buildFrtWorkbook(pages: DirPage[]): Promise<ExcelJS.Buffer
       const i = xr.number;
       ws.mergeCells(i, 2, i, 4); // "FRT Van For QRT Team" spans Division→Sub Station
       const cell = ws.getCell(i, 2);
-      cell.font = { bold: false, size: 13 };
+      cell.font = { bold: true, size: BODY_PT };
       cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
       lastUsed = i;
     }

@@ -21,19 +21,24 @@ const CSS = `
   .frt-page { page-break-before: always; overflow: hidden; }
   .frt-page:first-child { page-break-before: avoid; }
   table { border-collapse: collapse; width: 100%; table-layout: fixed; border: 2.5px solid #000; }
-  th, td { border: 1.5px solid #000; padding: 2px 10px; vertical-align: middle;
-    overflow-wrap: break-word; word-break: break-word; text-align: center; font-size: 17px; }
+  /* One type size for every column — the largest that keeps every value on a
+     single line at the widths below and still fits two-line cells in one row. */
+  table { --frt-fs: 21px; }
+  th, td { border: 1.5px solid #000; padding: 2px 6px; vertical-align: middle;
+    overflow-wrap: break-word; word-break: break-word; text-align: center; font-size: var(--frt-fs); }
   th { font-weight: 800; background: #ffe100; line-height: 1.15; }
-  td { font-weight: 600; }
-  td.left { text-align: left; }
-  .inc { font-weight: 800; font-size: 17px; }
+  td { font-weight: 700; }
+  td.sub { text-align: left; padding-left: 10px; }
+  .inc { font-weight: 800; }
   /* Every row shares the printable page height equally → table fills the page. */
   tr { height: calc(197mm / var(--rows, 12)); }
 `;
 
+// Each column gets exactly what its widest value needs at --frt-fs, so Sub Station
+// takes the rest — must stay in sync with app/frt-directory/page.tsx.
 const COLGROUP = `<colgroup>
-  <col style="width:5%"><col style="width:15%"><col style="width:14%"><col style="width:23%">
-  <col style="width:7%"><col style="width:18%"><col style="width:18%">
+  <col style="width:4.7%"><col style="width:16.4%"><col style="width:15%"><col style="width:27.7%">
+  <col style="width:8.3%"><col style="width:14.1%"><col style="width:13.8%">
 </colgroup>`;
 
 const HEAD = `<thead><tr>
@@ -57,7 +62,7 @@ function pageTable(page: DirPage): string {
       if (rowIndex === 0) {
         cells.push(`<td rowspan="${group.rows.length}">${esc(group.subDivision || "—")}</td>`);
       }
-      cells.push(`<td class="left">${esc(row.subStation)}</td>`);
+      cells.push(`<td class="sub">${esc(row.subStation)}</td>`);
       cells.push(`<td>${esc(row.frtVan)}</td>`);
       cells.push(`<td>${esc(row.vehicle)}</td>`);
       cells.push(`<td>${esc(row.frtMobile)}</td>`);

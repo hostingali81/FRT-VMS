@@ -104,13 +104,18 @@ export type DirGroup = { subDivision: string; rows: DirRow[] };
 export type DirQrt = { frtNo: number; srNo: number; label: string; frtVan: string; vehicle: string; frtMobile: string };
 export type DirPage = { division: string; groups: DirGroup[]; qrt?: DirQrt };
 
-/** Map each FRT number to the registration(s) of the vehicle(s) currently posted there. */
+/**
+ * Map each FRT number to the registration(s) of the vehicle(s) currently posted
+ * there. Only *active* vehicles are listed — one in maintenance, breakdown,
+ * standby or accident leaves its FRT row blank ("—") rather than printing a van
+ * that is not on the road.
+ */
 export function buildRegByFrt(
   vehicles: Array<{ status: string; frt_no: string | null; registration_no: string }>,
 ): Map<number, string[]> {
   const map = new Map<number, string[]>();
   for (const vehicle of vehicles) {
-    if (vehicle.status === "removed") continue;
+    if (vehicle.status !== "active") continue;
     const frt = parseFrtNo(vehicle.frt_no);
     if (frt == null) continue;
     const reg = vehicle.registration_no.replace(/\s+/g, "").toUpperCase();
