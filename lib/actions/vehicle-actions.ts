@@ -6,7 +6,17 @@ import { requireProfile } from "@/lib/auth";
 import { getAllLookups, getVehicle } from "@/lib/data";
 import { canAccessLocation, canCreateVehicle, canEditVehicle, canManageDrivers, canTransferVehicle } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { driverOwnershipSchema, driverSchema, fuelLogSchema, fuelOwnershipSchema, statusSchema, transferSchema, vehicleSchema } from "@/lib/validations";
+import {
+  driverOwnershipSchema,
+  driverSchema,
+  fuelLogDeleteSchema,
+  fuelLogSchema,
+  fuelLogUpdateSchema,
+  fuelOwnershipSchema,
+  statusSchema,
+  transferSchema,
+  vehicleSchema,
+} from "@/lib/validations";
 import { istToday } from "@/lib/utils/month";
 
 function today() {
@@ -308,6 +318,53 @@ export async function replaceDriverAssignmentAction(formData: FormData) {
   redirect(`/vehicles/${vehicleId}?driver=1`);
 }
 
+/** IST date + optional HH:MM → absolute instant, or null when no time was given. */
+function fuelLoggedAt(logDate: string, logTime: string | null | undefined): string | null {
+  if (!logTime) return null;
+  const dt = new Date(`${logDate}T${logTime}:00+05:30`);
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+function sameInstant(a: string | null | undefined, b: string | null | undefined) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
+/**
+ * Clear the cached GPS segment on the fills an edit/delete shifted, so the next
+ * "Sync GPS Data" recomputes them (the sync only fills rows where
+ * gps_distance_km IS NULL). A fill's segment starts at its previous same-type
+ * fill, so moving or removing one entry only affects the fills inside the moved
+ * window plus the first fill after it — later fills keep the same predecessor.
+ */
+async function resetFuelSegments(
+  supabase: ReturnType<typeof requireAdminClient>,
+  vehicleId: string,
+  fromDate: string,
+  toDate: string,
+) {
+  const { data: logs } = await supabase
+    .from("vehicle_fuel_logs")
+    .select("id,log_date")
+    .eq("vehicle_id", vehicleId)
+    .gte("log_date", fromDate)
+    .order("log_date", { ascending: true });
+
+  if (!logs || logs.length === 0) return;
+
+  const boundary = (logs as { id: string; log_date: string }[]).find((l) => l.log_date > toDate)?.log_date;
+  const ids = (logs as { id: string; log_date: string }[])
+    .filter((l) => boundary === undefined || l.log_date <= boundary)
+    .map((l) => l.id);
+  if (ids.length === 0) return;
+
+  await supabase
+    .from("vehicle_fuel_logs")
+    .update({ gps_distance_km: null, gps_synced_at: null })
+    .in("id", ids);
+}
+
 export async function addFuelLogAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
@@ -336,11 +393,7 @@ export async function addFuelLogAction(formData: FormData) {
   // Combine date + approximate time (entered in IST) into an absolute instant for
   // the GPS segment window. Blank/invalid time → null (the sync falls back to the
   // date's midnight).
-  let loggedAt: string | null = null;
-  if (data.log_time) {
-    const dt = new Date(`${data.log_date}T${data.log_time}:00+05:30`);
-    if (!Number.isNaN(dt.getTime())) loggedAt = dt.toISOString();
-  }
+  const loggedAt = fuelLoggedAt(data.log_date, data.log_time);
 
   const supabase = requireAdminClient();
   // Only send logged_at when a time was given, so "date only" entries keep working
@@ -366,6 +419,143 @@ export async function addFuelLogAction(formData: FormData) {
     fromAddPage
       ? `/fuel-log/add?added=${encodeURIComponent(vehicle.registration_no)}`
       : `/vehicles/${data.vehicle_id}?fuellog=1&tab=Fuel+Logs`,
+  );
+}
+
+/** Correct an existing fill — wrong amount, wrong date, wrong vehicle. */
+export async function updateFuelLogAction(formData: FormData) {
+  const profile = await requireProfile();
+  const lookups = await getAllLookups();
+  const rawData = Object.fromEntries(formData.entries());
+  const fromAddPage = formData.get("return_to") === "add";
+  const errorBack = (msg: string) =>
+    fromAddPage
+      ? `/fuel-log/add?error=${encodeURIComponent(msg)}`
+      : `/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(msg)}&tab=Fuel+Logs`;
+
+  const validated = fuelLogUpdateSchema.safeParse(rawData);
+  if (!validated.success) {
+    redirect(errorBack(validated.error.issues[0].message));
+  }
+
+  const data = validated.data;
+  const supabase = requireAdminClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from("vehicle_fuel_logs")
+    .select("id, vehicle_id, log_date, logged_at, fuel_type")
+    .eq("id", data.log_id)
+    .maybeSingle();
+
+  if (readError) throw new Error("Failed to load fuel entry: " + readError.message);
+  if (!existing) redirect(errorBack("Fuel entry not found"));
+
+  // The user must be able to edit both the vehicle the entry is leaving and the
+  // one it lands on, so an entry can never be pushed outside its own scope.
+  const sourceVehicle = await getVehicle(existing.vehicle_id as string, profile);
+  if (!sourceVehicle || !canEditVehicle(profile, sourceVehicle, lookups)) {
+    redirect(errorBack("You don't have access to this fuel entry"));
+  }
+  const targetVehicle =
+    data.vehicle_id === existing.vehicle_id ? sourceVehicle : await getVehicle(data.vehicle_id, profile);
+  if (!targetVehicle || !canEditVehicle(profile, targetVehicle, lookups)) {
+    redirect(errorBack("You don't have access to this vehicle"));
+  }
+  if (targetVehicle.fuel_ownership !== "company") {
+    redirect(errorBack("Fuel entries are only for company-fuel vehicles"));
+  }
+
+  const loggedAt = fuelLoggedAt(data.log_date, data.log_time);
+  const { error } = await supabase
+    .from("vehicle_fuel_logs")
+    .update({
+      vehicle_id: data.vehicle_id,
+      log_date: data.log_date,
+      logged_at: loggedAt,
+      fuel_type: data.fuel_type,
+      fuel_litres: data.fuel_litres,
+      fuel_amount: data.fuel_amount ?? null,
+      notes: data.notes ?? null,
+    })
+    .eq("id", data.log_id);
+
+  if (error) throw new Error("Failed to update fuel entry: " + error.message);
+
+  // Only vehicle/date/time/type edits move the GPS segment chain; a corrected
+  // amount or note leaves the measured distances valid.
+  const chainMoved =
+    existing.vehicle_id !== data.vehicle_id ||
+    existing.log_date !== data.log_date ||
+    existing.fuel_type !== data.fuel_type ||
+    !sameInstant(existing.logged_at as string | null, loggedAt);
+
+  if (chainMoved) {
+    const [from, to] =
+      (existing.log_date as string) < data.log_date
+        ? [existing.log_date as string, data.log_date]
+        : [data.log_date, existing.log_date as string];
+    await resetFuelSegments(supabase, existing.vehicle_id as string, from, to);
+    if (existing.vehicle_id !== data.vehicle_id) {
+      await resetFuelSegments(supabase, data.vehicle_id, data.log_date, data.log_date);
+    }
+  }
+
+  revalidatePath(`/vehicles/${data.vehicle_id}`);
+  if (existing.vehicle_id !== data.vehicle_id) revalidatePath(`/vehicles/${existing.vehicle_id}`);
+  revalidatePath("/fuel");
+  revalidatePath("/fuel-log");
+  revalidatePath("/fuel-log/add");
+  redirect(
+    fromAddPage
+      ? `/fuel-log/add?updated=${encodeURIComponent(targetVehicle.registration_no)}${chainMoved ? "&resync=1" : ""}`
+      : `/vehicles/${data.vehicle_id}?fuelupdated=1&tab=Fuel+Logs`,
+  );
+}
+
+/** Remove a fill that shouldn't exist at all (duplicate / wrong vehicle entry). */
+export async function deleteFuelLogAction(formData: FormData) {
+  const profile = await requireProfile();
+  const lookups = await getAllLookups();
+  const fromAddPage = formData.get("return_to") === "add";
+  const validated = fuelLogDeleteSchema.safeParse(Object.fromEntries(formData.entries()));
+
+  const errorBack = (msg: string, vehicleId?: string) =>
+    fromAddPage
+      ? `/fuel-log/add?error=${encodeURIComponent(msg)}`
+      : `/vehicles/${vehicleId ?? ""}?error=${encodeURIComponent(msg)}&tab=Fuel+Logs`;
+
+  if (!validated.success) redirect(errorBack("Invalid fuel entry"));
+
+  const supabase = requireAdminClient();
+  const { data: existing, error: readError } = await supabase
+    .from("vehicle_fuel_logs")
+    .select("id, vehicle_id, log_date")
+    .eq("id", validated.data.log_id)
+    .maybeSingle();
+
+  if (readError) throw new Error("Failed to load fuel entry: " + readError.message);
+  if (!existing) redirect(errorBack("Fuel entry not found"));
+
+  const vehicleId = existing.vehicle_id as string;
+  const vehicle = await getVehicle(vehicleId, profile);
+  if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) {
+    redirect(errorBack("You don't have access to this fuel entry", vehicleId));
+  }
+
+  const { error } = await supabase.from("vehicle_fuel_logs").delete().eq("id", validated.data.log_id);
+  if (error) throw new Error("Failed to delete fuel entry: " + error.message);
+
+  // The fill that followed this one now measures from an earlier fill.
+  await resetFuelSegments(supabase, vehicleId, existing.log_date as string, existing.log_date as string);
+
+  revalidatePath(`/vehicles/${vehicleId}`);
+  revalidatePath("/fuel");
+  revalidatePath("/fuel-log");
+  revalidatePath("/fuel-log/add");
+  redirect(
+    fromAddPage
+      ? `/fuel-log/add?deleted=${encodeURIComponent(vehicle.registration_no)}`
+      : `/vehicles/${vehicleId}?fueldeleted=1&tab=Fuel+Logs`,
   );
 }
 

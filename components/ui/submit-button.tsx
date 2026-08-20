@@ -19,17 +19,23 @@ export function SubmitButton({
   children,
   className,
   variant = "primary",
+  disabled = false,
+  title,
 }: {
   children: ReactNode;
   className?: string;
   variant?: Variant;
+  /** Blocks submission on top of the automatic pending state (e.g. a required field is still empty). */
+  disabled?: boolean;
+  title?: string;
 }) {
   const { pending } = useFormStatus();
 
   return (
     <button
       type="submit"
-      disabled={pending}
+      title={title}
+      disabled={pending || disabled}
       className={cn(
         "inline-flex h-10 items-center justify-center gap-2 rounded-md border px-4 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60",
         variants[variant],

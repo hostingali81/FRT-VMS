@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Fuel } from "lucide-react";
+import { Check, Fuel, Save, X } from "lucide-react";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Input, Label, Select } from "@/components/ui/form";
 import { cn } from "@/lib/utils/cn";
@@ -15,11 +15,45 @@ type VehicleOption = {
   fuel_type: string | null;
 };
 
+/** An existing fill being corrected — turns the form into edit mode. */
+export type FuelLogDraft = {
+  id: string;
+  vehicle_id: string;
+  log_date: string;
+  logged_at: string | null;
+  fuel_type: string | null;
+  fuel_litres: number;
+  fuel_amount: number | null;
+  notes: string | null;
+};
+
 const FUEL_TYPES = ["Diesel", "Petrol", "CNG"] as const;
 type FuelType = (typeof FUEL_TYPES)[number];
 
 function normalizeFuelType(value: string | null | undefined): FuelType {
   return (FUEL_TYPES as readonly string[]).includes(value ?? "") ? (value as FuelType) : "Diesel";
+}
+
+const MINUTE_STEPS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+/** Split a stored instant back into the IST hour / minute / AM-PM the form uses. */
+function istTimeParts(iso: string | null | undefined) {
+  const blank = { hour: "", minute: "00", ampm: "AM" };
+  if (!iso) return blank;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return blank;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    hour: String(Number(get("hour") || "0")),
+    minute: get("minute") || "00",
+    ampm: (get("dayPeriod") || "AM").toUpperCase().replace(/\./g, ""),
+  };
 }
 
 export function QuickFuelForm({
@@ -28,6 +62,8 @@ export function QuickFuelForm({
   today,
   returnTo = "add",
   locked = false,
+  entry,
+  onCancel,
 }: {
   vehicles: VehicleOption[];
   action: (formData: FormData) => Promise<void>;
@@ -36,16 +72,28 @@ export function QuickFuelForm({
   returnTo?: string;
   /** When true the vehicle is fixed (vehicles[0]) and shown as a label instead of a dropdown. */
   locked?: boolean;
+  /** Present → editing this fill instead of adding a new one. */
+  entry?: FuelLogDraft;
+  /** Edit mode only — renders a Cancel button next to Save. */
+  onCancel?: () => void;
 }) {
+  const isEdit = Boolean(entry);
   const lockedVehicle = locked ? vehicles[0] : undefined;
-  const [vehicleId, setVehicleId] = useState(lockedVehicle?.vehicle_id ?? "");
-  const [fuelType, setFuelType] = useState<FuelType>(normalizeFuelType(lockedVehicle?.fuel_type));
+  const [vehicleId, setVehicleId] = useState(entry?.vehicle_id ?? lockedVehicle?.vehicle_id ?? "");
+  const [fuelType, setFuelType] = useState<FuelType>(
+    normalizeFuelType(entry?.fuel_type ?? lockedVehicle?.fuel_type),
+  );
+
+  // Date is never pre-filled when adding — the user has to pick the fill date, so
+  // a mis-remembered "today" can't slip in unnoticed. Editing starts on the saved date.
+  const [logDate, setLogDate] = useState(entry?.log_date ?? "");
 
   // Custom 12-hour time picker — the native <input type="time"> shows 24-hour
   // (no AM/PM) on many devices. Hour blank → no time sent (stays optional).
-  const [hour, setHour] = useState("");
-  const [minute, setMinute] = useState("00");
-  const [ampm, setAmpm] = useState("AM");
+  const initialTime = istTimeParts(entry?.logged_at);
+  const [hour, setHour] = useState(initialTime.hour);
+  const [minute, setMinute] = useState(initialTime.minute);
+  const [ampm, setAmpm] = useState(initialTime.ampm);
   const logTime = (() => {
     if (!hour) return "";
     let h = parseInt(hour, 10);
@@ -54,12 +102,24 @@ export function QuickFuelForm({
     return `${String(h).padStart(2, "0")}:${minute}`;
   })();
 
+  // A saved fill can hold any minute (e.g. 07); keep it selectable alongside the steps.
+  const minuteOptions = MINUTE_STEPS.includes(minute)
+    ? MINUTE_STEPS
+    : [...MINUTE_STEPS, minute].sort((a, b) => Number(a) - Number(b));
+
   const selectedVehicle = vehicles.find((v) => v.vehicle_id === vehicleId);
+  const missingDate = !logDate;
+  const missingVehicle = !locked && !vehicleId;
+
+  // No future fills. An entry saved before that rule existed can still sit in the
+  // future — don't lock its own date out, or the row becomes uncorrectable.
+  const maxDate = entry && entry.log_date > today ? entry.log_date : today;
 
   return (
     <form action={action} className="space-y-6">
       <input type="hidden" name="return_to" value={returnTo} />
       <input type="hidden" name="fuel_type" value={fuelType} />
+      {entry && <input type="hidden" name="log_id" value={entry.id} />}
 
       {/* Vehicle — locked shows a label, otherwise a dropdown that auto-sets fuel type */}
       {lockedVehicle ? (
@@ -132,8 +192,19 @@ export function QuickFuelForm({
           accurate (GPS distance is measured between the two fills' exact times). */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label className="text-base">Date</Label>
-          <Input name="log_date" type="date" defaultValue={today} required className="h-12 text-base" />
+          <Label className="text-base">
+            Date <span className="font-normal text-slate-400">(required)</span>
+          </Label>
+          <Input
+            name="log_date"
+            type="date"
+            value={logDate}
+            onChange={(e) => setLogDate(e.target.value)}
+            max={maxDate}
+            required
+            aria-invalid={missingDate}
+            className="h-12 text-base"
+          />
         </div>
         <div className="space-y-1.5">
           <Label className="text-base">
@@ -148,7 +219,7 @@ export function QuickFuelForm({
             </Select>
             <span className="text-lg font-semibold text-slate-400">:</span>
             <Select value={minute} onChange={(e) => setMinute(e.target.value)} className="h-12 flex-1 text-base" aria-label="Minute">
-              {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map((m) => (
+              {minuteOptions.map((m) => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </Select>
@@ -173,6 +244,7 @@ export function QuickFuelForm({
             step="0.01"
             min="0.01"
             placeholder="e.g. 40"
+            defaultValue={entry ? String(entry.fuel_litres) : undefined}
             required
             className="h-12 text-base"
           />
@@ -186,7 +258,10 @@ export function QuickFuelForm({
             step="0.01"
             min="0"
             placeholder="e.g. 3600"
-            required
+            defaultValue={entry?.fuel_amount != null ? String(entry.fuel_amount) : undefined}
+            // A row already stored without an amount stays correctable without
+            // having to invent one; new entries still must carry a cost.
+            required={!isEdit || entry?.fuel_amount != null}
             className="h-12 text-base"
           />
         </div>
@@ -197,17 +272,40 @@ export function QuickFuelForm({
         <Label className="text-base">
           Notes <span className="font-normal text-slate-400">(optional)</span>
         </Label>
-        <Input name="notes" placeholder="Koi remark ho to…" className="h-12 text-base" />
+        <Input
+          name="notes"
+          placeholder="Koi remark ho to…"
+          defaultValue={entry?.notes ?? undefined}
+          className="h-12 text-base"
+        />
       </div>
 
-      <SubmitButton className="h-12 w-full text-base">
-        <Fuel className="h-5 w-5" aria-hidden="true" />
-        Save Fuel Entry
-      </SubmitButton>
+      <div className={cn("flex gap-2", isEdit && onCancel ? "flex-col sm:flex-row" : "")}>
+        <SubmitButton
+          className="h-12 w-full text-base"
+          disabled={missingDate || missingVehicle}
+          title={missingDate ? "Select a date to continue" : undefined}
+        >
+          {isEdit ? <Save className="h-5 w-5" aria-hidden="true" /> : <Fuel className="h-5 w-5" aria-hidden="true" />}
+          {isEdit ? "Update Entry" : "Save Fuel Entry"}
+        </SubmitButton>
+        {isEdit && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-base font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-40"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+            Cancel
+          </button>
+        )}
+      </div>
 
-      <p className="text-center text-xs text-slate-500">
-        KM aur average GPS sync ke baad apne aap aa jayega.
-      </p>
+      {!isEdit && (
+        <p className="text-center text-xs text-slate-500">
+          KM aur average GPS sync ke baad apne aap aa jayega.
+        </p>
+      )}
     </form>
   );
 }

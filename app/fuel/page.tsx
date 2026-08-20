@@ -58,7 +58,9 @@ export default async function FuelDashboardPage({
     getAllLookups(),
   ]);
 
-  const activeVehicles = vehicles.filter((v) => v.status !== "removed");
+  // Only vehicles that are actually on the road — maintenance/breakdown/standby/
+  // accident/removed are left out of the dashboard and its month totals.
+  const activeVehicles = vehicles.filter((v) => v.status === "active");
 
   const logsByVehicle = new Map<string, typeof fuelLogs>();
   for (const log of fuelLogs) {
@@ -152,7 +154,7 @@ export default async function FuelDashboardPage({
 
   return (
     <AppShell profile={profile}>
-      <PageHeader title="Fuel Dashboard" eyebrow="Monthly fuel summary per vehicle">
+      <PageHeader title="Fuel Dashboard" eyebrow="Monthly fuel summary — active vehicles only">
         {canAddFuel && (
           <LinkButton href="/fuel-log/add">
             <Fuel className="h-4 w-4" aria-hidden="true" />
@@ -201,7 +203,7 @@ export default async function FuelDashboardPage({
         {rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
             <Droplets className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-            <p className="text-sm font-medium text-slate-600">No vehicles in your scope</p>
+            <p className="text-sm font-medium text-slate-600">Aapke scope me koi active vehicle nahi hai</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

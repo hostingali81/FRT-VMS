@@ -92,7 +92,9 @@ export const driverOwnershipSchema = z.object({
 
 export const fuelLogSchema = z.object({
   vehicle_id: z.string().uuid(),
-  log_date: z.string().min(1, "Date is required"),
+  // Never defaulted on the form — the user has to pick the fill date themselves,
+  // so a blank/garbage value must fail here rather than silently become today.
+  log_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select the fuel entry date"),
   log_time: z.string().optional().nullable(), // optional HH:MM (IST); blank → date only
   fuel_type: z.enum(["CNG", "Petrol", "Diesel"], { message: "Select a fuel type" }),
   fuel_litres: z.preprocess(
@@ -104,4 +106,13 @@ export const fuelLogSchema = z.object({
     z.number().min(0, "Amount must be 0 or more").nullable().optional(),
   ),
   notes: z.string().optional().nullable(),
+});
+
+/** Editing an existing fill — same fields plus the row being corrected. */
+export const fuelLogUpdateSchema = fuelLogSchema.extend({
+  log_id: z.string().uuid(),
+});
+
+export const fuelLogDeleteSchema = z.object({
+  log_id: z.string().uuid(),
 });
