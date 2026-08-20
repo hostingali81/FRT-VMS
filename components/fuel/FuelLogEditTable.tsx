@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Pencil, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { QuickFuelForm, type FuelLogDraft } from "@/components/fuel/QuickFuelForm";
 import { formatDate } from "@/lib/utils/format";
@@ -25,7 +26,7 @@ type VehicleOption = {
   fuel_type: string | null;
 };
 
-/** "01 Jun 2026, 09:30 AM" → just the time half, in IST. */
+/** The time half of a stored fill instant, in IST. */
 function formatTimeIST(iso: string | null) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -39,9 +40,9 @@ function formatTimeIST(iso: string | null) {
 }
 
 /**
- * Recent fuel entries with in-place correction. The pencil opens the same form
- * used to add an entry, pre-filled with the saved values; the bin removes the
- * entry after an inline confirm.
+ * Recent fuel entries with in-place correction. The pencil opens the add form in
+ * a modal, pre-filled with the saved values; the bin opens a confirmation dialog
+ * before the entry is removed.
  */
 export function FuelLogEditTable({
   entries,
@@ -60,49 +61,10 @@ export function FuelLogEditTable({
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const editing = entries.find((e) => e.id === editingId) ?? null;
-
-  // The edit card renders above a long table; bring it into view so a pencil
-  // pressed near the bottom of the list doesn't look like it did nothing.
-  const focusEditCard = useCallback((node: HTMLDivElement | null) => {
-    node?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, []);
+  const confirming = entries.find((e) => e.id === confirmId) ?? null;
 
   return (
-    <div className="space-y-4">
-      {editing && (
-        <div ref={focusEditCard}>
-          <Card className="border-slate-900 shadow-md">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>
-                  Edit Entry — <span className="font-mono">{editing.registration_no}</span>
-                </CardTitle>
-                <button
-                  type="button"
-                  onClick={() => setEditingId(null)}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
-                >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" /> Cancel
-                </button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* key remounts the form when a different row is picked, so every
-                  field re-seeds from that entry instead of keeping the last one's. */}
-              <QuickFuelForm
-                key={editing.id}
-                entry={editing}
-                vehicles={vehicles}
-                action={updateAction}
-                today={today}
-                returnTo="add"
-                onCancel={() => setEditingId(null)}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
+    <>
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
@@ -135,17 +97,9 @@ export function FuelLogEditTable({
               <tbody className="divide-y divide-slate-100 bg-white">
                 {entries.map((log) => {
                   const time = formatTimeIST(log.logged_at);
-                  const isEditing = editingId === log.id;
-                  const isConfirming = confirmId === log.id;
+                  const isOpen = editingId === log.id || confirmId === log.id;
                   return (
-                    <tr
-                      key={log.id}
-                      className={cn(
-                        "hover:bg-slate-50",
-                        isEditing && "bg-slate-50",
-                        isConfirming && "bg-red-50 hover:bg-red-50",
-                      )}
-                    >
+                    <tr key={log.id} className={cn("hover:bg-slate-50", isOpen && "bg-slate-50")}>
                       <td className="px-4 py-3 font-medium text-slate-900">
                         {formatDate(log.log_date)}
                         {time && <span className="block text-xs font-normal text-slate-400">{time}</span>}
@@ -165,57 +119,32 @@ export function FuelLogEditTable({
                       </td>
                       <td className="px-4 py-3 text-slate-500">{log.recorded_by ?? "—"}</td>
                       <td className="px-4 py-3">
-                        {isConfirming ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="text-xs font-medium text-red-700">Delete this entry?</span>
-                            <form action={deleteAction}>
-                              <input type="hidden" name="log_id" value={log.id} />
-                              <input type="hidden" name="return_to" value="add" />
-                              <SubmitButton variant="danger" className="h-8 px-2.5 text-xs">
-                                Delete
-                              </SubmitButton>
-                            </form>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmId(null)}
-                              className="inline-flex h-8 items-center rounded-md border border-slate-300 px-2.5 text-xs font-semibold text-slate-700 hover:bg-white"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConfirmId(null);
-                                setEditingId(isEditing ? null : log.id);
-                              }}
-                              aria-label={`Edit the ${formatDate(log.log_date)} entry for ${log.registration_no}`}
-                              title="Edit entry"
-                              className={cn(
-                                "inline-flex h-8 w-8 items-center justify-center rounded-md border transition",
-                                isEditing
-                                  ? "border-slate-950 bg-slate-950 text-white"
-                                  : "border-slate-300 text-slate-700 hover:bg-slate-100",
-                              )}
-                            >
-                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingId(null);
-                                setConfirmId(log.id);
-                              }}
-                              aria-label={`Delete the ${formatDate(log.log_date)} entry for ${log.registration_no}`}
-                              title="Delete entry"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-500 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmId(null);
+                              setEditingId(log.id);
+                            }}
+                            aria-label={`Edit the ${formatDate(log.log_date)} entry for ${log.registration_no}`}
+                            title="Edit entry"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(null);
+                              setConfirmId(log.id);
+                            }}
+                            aria-label={`Delete the ${formatDate(log.log_date)} entry for ${log.registration_no}`}
+                            title="Delete entry"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-500 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -225,6 +154,87 @@ export function FuelLogEditTable({
           </div>
         )}
       </Card>
+
+      {/* Edit — the add form, pre-filled, in a modal over the current screen. */}
+      <Modal
+        open={Boolean(editing)}
+        onClose={() => setEditingId(null)}
+        title={editing ? `Edit Entry — ${editing.registration_no}` : "Edit Entry"}
+        description={editing ? formatDate(editing.log_date) : undefined}
+      >
+        {editing && (
+          <QuickFuelForm
+            key={editing.id}
+            entry={editing}
+            vehicles={vehicles}
+            action={updateAction}
+            today={today}
+            returnTo="add"
+            onCancel={() => setEditingId(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Delete — confirmation dialog; the entry is gone for good. */}
+      <Modal
+        open={Boolean(confirming)}
+        onClose={() => setConfirmId(null)}
+        title="Delete fuel entry?"
+        size="sm"
+        role="alertdialog"
+      >
+        {confirming && (
+          <>
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 text-sm text-slate-600">
+                <p>Ye entry permanently delete ho jayegi. Undo nahi hoga.</p>
+                <dl className="mt-3 space-y-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                  <Row label="Vehicle" value={confirming.registration_no} />
+                  <Row
+                    label="Date"
+                    value={`${formatDate(confirming.log_date)}${
+                      formatTimeIST(confirming.logged_at) ? `, ${formatTimeIST(confirming.logged_at)}` : ""
+                    }`}
+                  />
+                  <Row label="Fuel" value={`${confirming.fuel_litres} L${confirming.fuel_type ? ` · ${confirming.fuel_type}` : ""}`} />
+                  <Row
+                    label="Amount"
+                    value={confirming.fuel_amount != null ? `₹${confirming.fuel_amount.toLocaleString("en-IN")}` : "—"}
+                  />
+                </dl>
+              </div>
+            </div>
+
+            <form action={deleteAction} className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <input type="hidden" name="log_id" value={confirming.id} />
+              <input type="hidden" name="return_to" value="add" />
+              <button
+                type="button"
+                onClick={() => setConfirmId(null)}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <SubmitButton variant="danger">
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Delete Entry
+              </SubmitButton>
+            </form>
+          </>
+        )}
+      </Modal>
+    </>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="truncate font-medium text-slate-800">{value}</dd>
     </div>
   );
 }
