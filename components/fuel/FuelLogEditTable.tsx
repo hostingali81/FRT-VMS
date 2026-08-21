@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { LinkButton } from "@/components/ui/button";
 import { QuickFuelForm, type FuelLogDraft } from "@/components/fuel/QuickFuelForm";
 import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -50,12 +51,16 @@ export function FuelLogEditTable({
   updateAction,
   deleteAction,
   today,
+  page = 1,
+  totalPages = 1,
 }: {
   entries: FuelLogRow[];
   vehicles: VehicleOption[];
   updateAction: (formData: FormData) => Promise<void>;
   deleteAction: (formData: FormData) => Promise<void>;
   today: string;
+  page?: number;
+  totalPages?: number;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -151,6 +156,58 @@ export function FuelLogEditTable({
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+            <div className="flex flex-1 justify-between sm:hidden">
+              <LinkButton
+                href={`?page=${page - 1}`}
+                variant="outline"
+                className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+                aria-disabled={page <= 1}
+              >
+                Previous
+              </LinkButton>
+              <LinkButton
+                href={`?page=${page + 1}`}
+                variant="outline"
+                className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
+                aria-disabled={page >= totalPages}
+              >
+                Next
+              </LinkButton>
+            </div>
+            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-slate-700">
+                  Showing page <span className="font-medium">{page}</span> of <span className="font-medium">{totalPages}</span>
+                </p>
+              </div>
+              <div>
+                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                  <LinkButton
+                    href={`?page=${page - 1}`}
+                    variant="outline"
+                    className={`rounded-l-md rounded-r-none ${page <= 1 ? "pointer-events-none opacity-50" : ""}`}
+                    aria-disabled={page <= 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="sr-only">Previous</span>
+                  </LinkButton>
+                  <LinkButton
+                    href={`?page=${page + 1}`}
+                    variant="outline"
+                    className={`rounded-l-none rounded-r-md ${page >= totalPages ? "pointer-events-none opacity-50" : ""}`}
+                    aria-disabled={page >= totalPages}
+                  >
+                    <span className="sr-only">Next</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </LinkButton>
+                </nav>
+              </div>
+            </div>
           </div>
         )}
       </Card>

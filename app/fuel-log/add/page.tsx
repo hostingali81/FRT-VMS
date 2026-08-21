@@ -19,7 +19,7 @@ const RECENT_LIMIT = 25;
 export default async function AddFuelEntryPage({
   searchParams,
 }: {
-  searchParams: { added?: string; updated?: string; deleted?: string; resync?: string; error?: string };
+  searchParams: { added?: string; updated?: string; deleted?: string; resync?: string; error?: string; page?: string };
 }) {
   // Start the fleet queries while the auth round trips are still in flight.
   preloadFleetData();
@@ -52,14 +52,19 @@ export default async function AddFuelEntryPage({
     .sort((a, b) => a.registration_no.localeCompare(b.registration_no))
     .map(toOption);
 
+  const page = Math.max(1, parseInt(searchParams.page || "1", 10));
+  const offset = (page - 1) * RECENT_LIMIT;
+
   // Newest first — same tie-break as the Fuel Log page (date, then insert order).
-  const recentLogs = allFuelLogs
+  const sortedFilteredLogs = allFuelLogs
     .filter((log) => manageableById.has(log.vehicle_id))
     .sort((a, b) => {
       if (a.log_date !== b.log_date) return b.log_date.localeCompare(a.log_date);
       return (b.created_at ?? "").localeCompare(a.created_at ?? "");
-    })
-    .slice(0, RECENT_LIMIT);
+    });
+    
+  const totalPages = Math.ceil(sortedFilteredLogs.length / RECENT_LIMIT);
+  const recentLogs = sortedFilteredLogs.slice(offset, offset + RECENT_LIMIT);
 
   const recentEntries: FuelLogRow[] = recentLogs.map((log) => {
     const vehicle = manageableById.get(log.vehicle_id)!;
@@ -170,6 +175,8 @@ export default async function AddFuelEntryPage({
               updateAction={updateFuelLogAction}
               deleteAction={deleteFuelLogAction}
               today={today}
+              page={page}
+              totalPages={totalPages}
             />
           </div>
         )}
