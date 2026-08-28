@@ -1,13 +1,11 @@
-import Link from "next/link";
-import { Droplets, Fuel, Plus, RefreshCw } from "lucide-react";
+import { Fuel, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DismissibleBanner } from "@/components/ui/dismissible-banner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MonthNavigator } from "@/components/fuel/MonthNavigator";
-import { Tooltip } from "@/components/ui/tooltip";
+import { FuelDashboardTable, type FuelDashboardRow } from "@/components/fuel/FuelDashboardTable";
 import { requireProfile } from "@/lib/auth";
 import {
   getAllFuelLogs,
@@ -19,9 +17,8 @@ import {
   preloadFuelMonthData,
 } from "@/lib/data";
 import { canCreateVehicle, canEditVehicle } from "@/lib/permissions";
-import { computeMileageByFuel, type FuelMileage, type MileageBreakdown } from "@/lib/mileage";
+import { computeMileageByFuel, type MileageBreakdown } from "@/lib/mileage";
 import { syncGpsMonthlyDistanceAction } from "@/lib/actions/gps-actions";
-import { formatDate } from "@/lib/utils/format";
 import { currentYearMonth, isValidYearMonth } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
@@ -84,41 +81,49 @@ export default async function FuelDashboardPage({
     return match ? parseInt(match[0], 10) : Number.POSITIVE_INFINITY;
   };
 
-  const rows = activeVehicles.map((v) => {
-    const logs = logsByVehicle.get(v.vehicle_id) ?? [];
-    // Round the float sum — adding decimals (e.g. 5.5 + 8.69) leaves artifacts like 14.190000000000001.
-    const totalLitres = +logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0).toFixed(2);
-    const totalAmount = logs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0);
-    const gpsKm = gpsKmByVehicle.get(v.vehicle_id) ?? 0;
-    // Mileage uses the tankful method (GPS first→last fill ÷ fuel minus the latest
-    // fill), not the raw monthly GPS ÷ litres — and per fuel type, so a bi-fuel
-    // vehicle's CNG and petrol stay separate.
-    const monthlyMileage = computeMileageByFuel(logs);
-    const allTimeMileage = computeMileageByFuel(allLogsByVehicle.get(v.vehicle_id) ?? []);
-    // Dominant fuel (most litres burned) for the fleet roll-up, so a bi-fuel vehicle
-    // contributes its distance once instead of once per fuel type.
-    const primaryMonthly = monthlyMileage.reduce<MileageBreakdown | null>(
-      (best, m) => (best && best.litres >= m.breakdown.litres ? best : m.breakdown),
-      null,
-    );
-    const hasGps = Boolean(v.gps_device_id);
-    const canManage = canEditVehicle(profile, v, lookups);
-    return { vehicle: v, logs, totalLitres, totalAmount, gpsKm, monthlyMileage, allTimeMileage, primaryMonthly, hasGps, canManage };
-  }).sort((a, b) => frtSortKey(a.vehicle.frt_no) - frtSortKey(b.vehicle.frt_no));
-
-  const companyRows = rows.filter((r) => r.vehicle.fuel_ownership === "company");
-  const grandLitres = +companyRows.reduce((sum, r) => sum + r.totalLitres, 0).toFixed(2);
-  const grandAmount = companyRows.reduce((sum, r) => sum + r.totalAmount, 0);
-  const grandKm = rows.reduce((sum, r) => sum + r.gpsKm, 0);
-  // "Company distance" counts every vehicle the company is responsible for fuelling
-  // (fuel_ownership === "company"), regardless of whether fuel was logged this month.
-  // Vendor-fuelled vehicles are excluded — the company doesn't fuel them.
-  const companyKm = companyRows.reduce((sum, r) => sum + r.gpsKm, 0);
-  // Fleet monthly mileage = total mileage-distance ÷ total mileage-fuel across the
-  // company vehicles that have a computable figure (reconciles with each row's avg).
-  const fleetMileageKm = companyRows.reduce((sum, r) => sum + (r.primaryMonthly?.distanceKm ?? 0), 0);
-  const fleetMileageL = companyRows.reduce((sum, r) => sum + (r.primaryMonthly?.litres ?? 0), 0);
-  const grandAvg = fleetMileageL > 0 ? +(fleetMileageKm / fleetMileageL).toFixed(1) : null;
+  // Rows are fully computed here; the client component only filters, groups and
+  // sums them, so the mileage maths stays on the server where the logs live.
+  const rows: FuelDashboardRow[] = activeVehicles
+    .map((v) => {
+      const logs = logsByVehicle.get(v.vehicle_id) ?? [];
+      // Round the float sum — adding decimals (e.g. 5.5 + 8.69) leaves artifacts like 14.190000000000001.
+      const totalLitres = +logs.reduce((sum, l) => sum + (l.fuel_litres ?? 0), 0).toFixed(2);
+      const totalAmount = logs.reduce((sum, l) => sum + (l.fuel_amount ?? 0), 0);
+      // Mileage uses the tankful method (GPS first→last fill ÷ fuel minus the latest
+      // fill), not the raw monthly GPS ÷ litres — and per fuel type, so a bi-fuel
+      // vehicle's CNG and petrol stay separate.
+      const monthlyMileage = computeMileageByFuel(logs);
+      const allTimeMileage = computeMileageByFuel(allLogsByVehicle.get(v.vehicle_id) ?? []);
+      // Dominant fuel (most litres burned) for the roll-ups, so a bi-fuel vehicle
+      // contributes its distance once instead of once per fuel type.
+      const primary = monthlyMileage.reduce<MileageBreakdown | null>(
+        (best, m) => (best && best.litres >= m.breakdown.litres ? best : m.breakdown),
+        null,
+      );
+      return {
+        vehicleId: v.vehicle_id,
+        registrationNo: v.registration_no,
+        frtNo: v.frt_no,
+        vendorName: v.vendor_name,
+        circleId: v.current_circle_id,
+        circle: v.current_circle,
+        divisionId: v.division_id,
+        division: v.division,
+        substationId: v.substation_id,
+        substation: v.substation,
+        isCompany: v.fuel_ownership === "company",
+        entries: logs.length,
+        totalLitres,
+        totalAmount,
+        gpsKm: gpsKmByVehicle.get(v.vehicle_id) ?? 0,
+        hasGps: Boolean(v.gps_device_id),
+        canManage: canEditVehicle(profile, v, lookups),
+        monthlyMileage,
+        allTimeMileage,
+        primaryMonthly: primary ? { distanceKm: primary.distanceKm, litres: primary.litres } : null,
+      };
+    })
+    .sort((a, b) => frtSortKey(a.frtNo) - frtSortKey(b.frtNo));
 
   // GPS sync is open to vehicle managers; the action itself scopes each role to
   // the vehicles it can edit (super_admin syncs the whole fleet).
@@ -178,177 +183,21 @@ export default async function FuelDashboardPage({
 
       <MonthNavigator basePath="/fuel" yearMonth={yearMonth} />
 
-      {/* Summary strip — compact 3-col grid on mobile, inline row on sm+ */}
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-3 gap-x-3 gap-y-2.5 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-1.5">
-          <Stat value={grandKm > 0 ? `${Math.round(grandKm).toLocaleString("en-IN")} km` : "—"} label="total distance" />
-          <Stat value={companyKm > 0 ? `${Math.round(companyKm).toLocaleString("en-IN")} km` : "—"} label="company fuel distance" />
-          <Stat value={grandLitres > 0 ? `${grandLitres} L` : "—"} label="total fuel" />
-          <Stat value={grandAvg !== null ? `${grandAvg} km/L` : "—"} label="average" />
-          <Stat value={grandAmount > 0 ? `₹${grandAmount.toLocaleString("en-IN")}` : "—"} label="total cost" />
-          {/* Fills the empty 6th cell on mobile; the header copy handles sm+ */}
-          {canSyncGps && (
+      <FuelDashboardTable
+        rows={rows}
+        yearMonth={yearMonth}
+        syncSlot={
+          canSyncGps ? (
             <form action={syncGpsMonthlyDistanceAction} className="flex items-center sm:hidden">
               <SubmitButton variant="outline" className="h-9 w-full gap-1.5 px-2 text-xs">
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                 Sync GPS
               </SubmitButton>
             </form>
-          )}
-        </div>
-      </div>
-
-      {/* Vehicle table */}
-      <div className="px-4 py-5 sm:px-6 lg:px-8">
-        {rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
-            <Droplets className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-            <p className="text-sm font-medium text-slate-600">Aapke scope me koi active vehicle nahi hai</p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] divide-y divide-slate-200 text-xs sm:min-w-[760px] sm:text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Vehicle</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Location</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3">Fuel By</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Entries</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Fuel (L)</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Cost (₹)</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">KM (GPS)</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">Mileage (mo)</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-right">All-time</th>
-                    <th className="px-3 py-2.5 sm:px-5 sm:py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map(({ vehicle, logs, totalLitres, totalAmount, gpsKm, monthlyMileage, allTimeMileage, hasGps, canManage }) => {
-                    const isCompany = vehicle.fuel_ownership === "company";
-                    return (
-                      <tr key={vehicle.vehicle_id} className="hover:bg-slate-50">
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5">
-                          <Link
-                            href={`/vehicles/${vehicle.vehicle_id}?tab=Fuel+Logs`}
-                            className="font-semibold text-slate-900 hover:underline"
-                          >
-                            {vehicle.registration_no}
-                          </Link>
-                          <p className="text-xs text-slate-400">{vehicle.vendor_name ?? "—"}</p>
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5">
-                          <span className="block font-semibold text-slate-700">
-                            {vehicle.substation ?? "—"}{vehicle.frt_no ? ` (${vehicle.frt_no})` : ""}
-                          </span>
-                          <span className="text-xs text-slate-400">{vehicle.division ?? "Unassigned"}</span>
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5">
-                          <Badge tone={isCompany ? "blue" : "yellow"}>
-                            {isCompany ? "Company" : "Vendor"}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          {isCompany ? (
-                            <span className={logs.length > 0 ? "font-semibold text-slate-900" : "text-slate-400"}>
-                              {logs.length}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          {isCompany && totalLitres > 0 ? (
-                            <span className="font-medium text-slate-900">{totalLitres}</span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          {isCompany && totalAmount > 0 ? (
-                            <span className="font-medium text-slate-900">
-                              {totalAmount.toLocaleString("en-IN")}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right text-slate-600">
-                          {hasGps ? (
-                            <span className={gpsKm > 0 ? "font-medium text-slate-900" : "text-slate-400"}>
-                              {gpsKm.toLocaleString("en-IN")}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          <MileageCell items={monthlyMileage} tone="green" label="Is mahine" />
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          <MileageCell items={allTimeMileage} tone="blue" label="All-time" />
-                        </td>
-                        <td className="px-3 py-3 sm:px-5 sm:py-3.5 text-right">
-                          {isCompany && canManage && (
-                            <Link
-                              href={`/vehicles/${vehicle.vehicle_id}?tab=Fuel+Logs`}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              <Plus className="h-3 w-3" />
-                              Add Entry
-                            </Link>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+          ) : null
+        }
+      />
     </AppShell>
-  );
-}
-
-/** Per-fuel-type mileage badges, each with a tooltip that spells out the calc. */
-function MileageCell({ items, tone, label }: { items: FuelMileage[]; tone: "green" | "blue"; label: string }) {
-  if (items.length === 0) return <span className="text-slate-300">—</span>;
-  return (
-    <div className="flex flex-col items-end gap-1">
-      {items.map(({ fuelType, breakdown: m }) => (
-        <Tooltip
-          key={fuelType ?? "untyped"}
-          content={
-            <span className="block">
-              <span className="font-semibold">{fuelType ?? "Fuel"} · {label}: {m.kmpl} km/L</span>
-              <br />
-              {m.distanceKm.toLocaleString("en-IN")} km ÷ {m.litres} L
-              <br />
-              {formatDate(m.fromDate)} → {formatDate(m.toDate)} · {m.fills} fills
-              <br />
-              <span className="text-slate-400">aakhri fill chhod ke</span>
-            </span>
-          }
-        >
-          <Badge tone={tone}>
-            {fuelType && <span className="mr-1 text-[10px] font-medium opacity-70">{fuelType}</span>}
-            {m.kmpl}
-          </Badge>
-        </Tooltip>
-      ))}
-    </div>
-  );
-}
-
-/** Compact summary metric — value above label on mobile, inline on sm+. */
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-      <span className="text-sm font-bold tabular-nums text-slate-900 sm:text-base">{value}</span>
-      <span className="text-[11px] text-slate-500 sm:text-sm">{label}</span>
-    </span>
   );
 }
 
