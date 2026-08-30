@@ -36,7 +36,8 @@ Paste-ready live links:
 - **Nulls mean "not known", zero means "measured as zero".** A vehicle with `distance_km: 0` was tracked and did not move; one whose GPS was never synced also reports `0` but carries `gps.tracked` and `months_with_gps_data` so you can tell the two apart. `mileage.kmpl: null` always comes with an `unavailable_reason`.
 - **Rounding** — litres, cost and distance to 2 decimals; km/L to 1 decimal, matching the dashboard.
 - **Stability** — fields are added, not renamed or removed. Ignore unknown keys.
-- **Rate limits** — none enforced. Please cache on your side rather than polling in a tight loop; the whole fleet comes back in one call.
+- **Response time** — `/api/public/fuel` refreshes GPS data before answering, so an unfiltered call can take 10–15 seconds. Filter it, or pass `refresh=off`, when you need a fast response. The other two endpoints answer immediately.
+- **Rate limits** — none enforced, but the GPS refresh is throttled (see [Live GPS refresh](#live-gps-refresh)). Please cache on your side rather than polling in a tight loop; the whole fleet comes back in one call.
 
 ---
 
@@ -71,6 +72,7 @@ All are optional. Unknown values return `400` with a `hint` telling you the vali
 | `include` | — | Comma-separated extras: `logs` (every fill-up), `months` (per-month breakdown), or `all`. |
 | `sort` | `frt` | `frt`, `registration`, `fills`, `litres`, `cost`, `km`, `mileage`. |
 | `order` | — | `asc` or `desc`. Defaults to ascending for `frt`/`registration`, descending for the metric sorts. |
+| `refresh` | `auto` | Pull fresh GPS distance before answering — `auto`, `force` or `off`. See [Live GPS refresh](#live-gps-refresh). |
 
 > `month=all` reports every fill ever recorded and sums the GPS distance of every synced month. Combined with `include=months` it is the fastest way to pull the fleet's complete fuel history in one request.
 
@@ -87,6 +89,67 @@ All are optional. Unknown values return `400` with a `hint` telling you the vali
 | Fleet ranked by mileage | `/api/public/fuel?ownership=company&sort=mileage` |
 
 **Only vehicles the fleet actually runs are returned by default** (`status=active`). A standby, accident or removed vehicle no longer holds its FRT number or substation — those belong to whichever vehicle is deployed there now — so counting it would double-count a posting. Pass `status=all` when you want the full register.
+
+### Live GPS refresh
+
+Distance and mileage are only as good as the last GPS sync, so **this endpoint refreshes GPS data from the tracking providers before it answers** — the same two syncs the Fuel Dashboard's **Sync GPS Data** button runs:
+
+1. **Monthly distance** — each tracked vehicle's kilometres for the current month.
+2. **Per-fill segments** — the GPS distance between fuel fills, which is what mileage is actually computed from.
+
+So a caller gets the latest numbers without anyone having to press a button in the app first.
+
+The sync is **scoped to the vehicles the request selected**, so `?reg=UP41CT6926` refreshes one vehicle (about a second), while an unfiltered call refreshes the whole tracked fleet (roughly 10–15 seconds for ~50 vehicles).
+
+#### `refresh` modes
+
+| Value | Behaviour |
+| --- | --- |
+| `auto` (default) | Sync only if the selection's GPS data is more than **5 minutes** old. Fresh data is served straight from storage. |
+| `force` | Sync regardless of age. |
+| `off` | Never sync — serve stored data. The fast path, well under a second. |
+
+Two throttles protect the fleet's GPS provider accounts, because this endpoint is public and each sync is one provider call per tracked vehicle:
+
+- **A 60-second hard floor.** No sync runs within 60 seconds of the previous one for that selection — `refresh=force` included. Hitting the endpoint in a loop cannot hammer the providers.
+- **One sync at a time.** Concurrent callers wait for the same run instead of each starting their own.
+
+The refresh is best-effort and never breaks the response. If a provider is down, times out (45-second budget) or returns errors, the endpoint still answers `200` with the last stored data and says so in `meta.gps_sync`.
+
+> **Choosing a mode.** Use the default `auto` for reports and dashboards. Use `refresh=off` when you are looping over many requests or want a guaranteed-fast response. Use `refresh=force` right after someone has entered a fuel bill and you want that fill's segment measured immediately.
+
+#### `meta.gps_sync`
+
+Every response reports exactly what the refresh did, so a number is never silently stale:
+
+```json
+"gps_sync": {
+  "ran": true,
+  "mode": "auto",
+  "reason": null,
+  "vehicles_synced": 48,
+  "months_updated": 48,
+  "segments_updated": 3,
+  "failed": 0,
+  "took_ms": 11590,
+  "timed_out": false,
+  "data_synced_at": "2026-08-30T10:04:14.956Z"
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `ran` | Whether a sync actually ran on this request |
+| `mode` | The `refresh` mode that was applied |
+| `reason` | Why no sync ran — `null` when one did, e.g. `"already synced within the last 5 minutes"` |
+| `vehicles_synced` | Vehicles the sync touched |
+| `months_updated` | Month-rows written to the distance history |
+| `segments_updated` | Fill-to-fill segments newly measured — these are what unlock a `null` mileage |
+| `failed` | Vehicles the provider could not answer for |
+| `took_ms` | How long the sync took |
+| `timed_out` | `true` when the 45-second budget was hit; whatever had already synced is still saved |
+| `error` | Present only when the refresh threw. The response is still valid, just not refreshed |
+| `data_synced_at` | When the GPS data behind this response was last written |
 
 ### Response
 
@@ -116,7 +179,20 @@ All are optional. Unknown values return `400` with a `hint` telling you the vali
       "vendor": null,
       "sort": "frt",
       "order": null,
-      "include": []
+      "include": [],
+      "refresh": "auto"
+    },
+    "gps_sync": {
+      "ran": true,
+      "mode": "auto",
+      "reason": null,
+      "vehicles_synced": 48,
+      "months_updated": 48,
+      "segments_updated": 3,
+      "failed": 0,
+      "took_ms": 11590,
+      "timed_out": false,
+      "data_synced_at": "2026-08-30T10:04:14.956Z"
     },
     "vehicle_count": 48,
     "fleet_size": 52
@@ -145,6 +221,7 @@ All are optional. Unknown values return `400` with a `hint` telling you the vali
 | `period.months` | The `YYYY-MM` months covered, or `null` for `month=all` |
 | `period.from`, `period.to` | Window edges. For `month=all` these are the earliest and latest fill dates actually found |
 | `filters` | Every filter as the server resolved it — echo it back in your UI so a report can never misrepresent its own scope |
+| `gps_sync` | What the pre-response GPS refresh did — see [Live GPS refresh](#live-gps-refresh) |
 | `vehicle_count` | Vehicles in this response (after filters) |
 | `fleet_size` | Vehicles in the VMS altogether, before filters |
 
@@ -321,7 +398,7 @@ A CNG vehicle that also takes a small petrol dose to start cannot be measured on
 | --- | --- |
 | `no fuel entries in this window` | Nothing was logged. Widen the window or check `all_time`. |
 | `needs at least 2 fills of the same fuel type in this window` | One fill can't measure a distance between fills. Use a longer window. |
-| `GPS distance not synced yet for one or more fills in this window` | The fill exists but its GPS segment hasn't been fetched. A partial number would read falsely low, so none is given — it appears after the next GPS sync. |
+| `GPS distance not synced yet for one or more fills in this window` | The fill exists but its GPS segment hasn't been fetched. A partial number would read falsely low, so none is given. The endpoint tries to fix this itself on every call — if it persists, the vehicle's provider is failing (check `meta.gps_sync.failed`) or it has no GPS device. |
 | `fuel burned in this window works out to zero` | Every fill but the latest was 0 L. Check the entries. |
 
 ### `include=logs` — every fill-up
@@ -555,7 +632,7 @@ A bad parameter returns HTTP `400` with a machine-readable body — never a part
 
 - **Fuel entries** are keyed in by hand at the pump, per fill, for company-fuelled vehicles. Nothing is estimated.
 - **Distance is GPS, not odometer.** It comes from the tracking providers (VehicleStep/Millitrack and WheelsEye) through the VMS's monthly sync. A vehicle with no GPS device (`gps.tracked: false`) will always report `0` km and no mileage.
-- **The monthly distance is a stored snapshot.** `distance_km` for a past month is frozen at whatever the last sync wrote; the current month keeps moving until the next sync. `all_time.months_with_gps_data` tells you how many months have ever been synced.
+- **The current month is refreshed live.** `/api/public/fuel` syncs GPS distance before answering (see [Live GPS refresh](#live-gps-refresh)), so the current month is up to the minute. Past months stay frozen at whatever the last sync wrote for them. `all_time.months_with_gps_data` tells you how many months have ever been synced.
 - **Per-fill segments are per fuel type.** `segment_distance_km` is the distance since the previous fill of the *same* fuel, which is what makes bi-fuel mileage possible.
 - **Corrections rewrite history.** Fuel entries can be edited in the VMS, so a report for a past month can legitimately change. Store `generated_at` next to anything you archive.
 - **Fleet composition changes.** FRT numbers follow the substation, not the vehicle. Join on `vehicle_id` if you need a stable key across months.

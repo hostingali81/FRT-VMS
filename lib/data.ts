@@ -58,6 +58,47 @@ async function selectRows<T>(view: string, fallback: T[], orderColumn?: string) 
   return data as T[];
 }
 
+/**
+ * Read an entire table, page by page, newest first.
+ *
+ * A single PostgREST response is capped by the project's "Max rows" setting
+ * (1000 by default), so a plain `select("*")` silently truncates once a table
+ * grows past it — which would quietly corrupt all-time mileage as fuel logs pile
+ * up. The loop advances by however many rows actually came back, so it is
+ * correct whatever the cap is set to.
+ *
+ * `id` is the tiebreaker: the sort columns here are not unique (several fills
+ * share one log_date), and without it a row could be repeated or skipped between
+ * pages.
+ */
+async function selectAllRows<T>(table: string, fallback: T[], orderColumn: string): Promise<T[]> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return fallback;
+
+  const PAGE = 1000;
+  const rows: T[] = [];
+
+  for (let guard = 0, from = 0; guard < 200; guard += 1) {
+    const { data, error } = await supabase
+      .from(table as never)
+      .select("*")
+      .order(orderColumn, { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + PAGE - 1);
+
+    if (error) {
+      console.error(`[data.ts] Paged query on "${table}" failed:`, error.message);
+      return rows;
+    }
+    const batch = (data ?? []) as T[];
+    rows.push(...batch);
+    if (batch.length === 0) break;
+    from += batch.length;
+  }
+
+  return rows;
+}
+
 // Zero-arg cached raw fetchers. Keeping the cache() on the profile-independent
 // query (rather than only on the profile-keyed wrapper) means the DB round trip
 // dedupes across callers AND can be started before the profile is known.
@@ -355,21 +396,30 @@ export const getGpsDistanceForMonth = cache(
  * fuel API needs whole-history distance, which the per-month reader can't give.
  * The table holds one row per (vehicle, month), so this stays small.
  */
-export const getAllGpsDistance = cache(async (): Promise<GpsDistanceMonth[]> => {
+export const getAllGpsDistance = cache(
+  (): Promise<GpsDistanceMonth[]> => selectAllRows<GpsDistanceMonth>("vehicle_gps_distance", [], "year_month"),
+);
+
+/**
+ * When each vehicle's GPS distance for a month was last synced. Deliberately NOT
+ * cache()-wrapped: the public fuel API reads it to decide whether to refresh from
+ * the GPS providers, so it must see the live value on every request.
+ */
+export async function getGpsSyncTimes(yearMonth: string): Promise<Map<string, string>> {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) return [];
+  if (!supabase) return new Map();
 
   const { data, error } = await supabase
     .from("vehicle_gps_distance")
-    .select("*")
-    .order("year_month", { ascending: false });
+    .select("vehicle_id,synced_at")
+    .eq("year_month", yearMonth);
 
   if (error) {
-    console.error("[data.ts] getAllGpsDistance failed:", error.message);
-    return [];
+    console.error("[data.ts] getGpsSyncTimes failed:", error.message);
+    return new Map();
   }
-  return (data ?? []) as GpsDistanceMonth[];
-});
+  return new Map((data ?? []).map((row) => [row.vehicle_id as string, row.synced_at as string]));
+}
 
 export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<FuelOwnershipHistoryItem[]> {
   if (profile) {
@@ -437,21 +487,11 @@ export async function getFuelLogs(vehicleId: string, profile?: UserProfile | nul
   return (data ?? []) as FuelLogEntry[];
 }
 
-const fetchAllFuelLogs = cache(async (): Promise<FuelLogEntry[]> => {
-  const supabase = createSupabaseAdminClient();
-  if (!supabase) return mockFuelLogs;
-
-  const { data, error } = await supabase
-    .from("vehicle_fuel_logs")
-    .select("*")
-    .order("log_date", { ascending: false });
-
-  if (error) {
-    console.error("[data.ts] getAllFuelLogs failed:", error.message);
-    return [];
-  }
-  return (data ?? []) as FuelLogEntry[];
-});
+// Paged: this table grows by a few hundred rows a month, and a truncated read
+// would silently understate all-time mileage.
+const fetchAllFuelLogs = cache(
+  (): Promise<FuelLogEntry[]> => selectAllRows<FuelLogEntry>("vehicle_fuel_logs", mockFuelLogs, "log_date"),
+);
 
 /** Every fuel log the caller can see — used for all-time mileage on the dashboard. */
 export async function getAllFuelLogs(profile?: UserProfile | null): Promise<FuelLogEntry[]> {

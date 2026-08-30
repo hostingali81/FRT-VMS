@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getAllFuelLogs, getAllGpsDistance, getVehicles } from "@/lib/data";
+import { getAllFuelLogs, getAllGpsDistance, getGpsSyncTimes, getVehicles } from "@/lib/data";
+import { syncFuelSegmentDistances, syncMonthlyGpsDistance } from "@/lib/gps-distance";
 import { computeMileageByFuel, mileageUnavailableReason, type FuelMileage } from "@/lib/mileage";
-import { VEHICLE_STATUSES, type FuelLogEntry, type VehicleStatus } from "@/lib/types";
+import { VEHICLE_STATUSES, type FleetVehicle, type FuelLogEntry, type VehicleStatus } from "@/lib/types";
 import { currentYearMonth, isValidYearMonth, monthLabel } from "@/lib/utils/month";
 
 // PUBLIC, unauthenticated, read-only endpoint — the Fuel Dashboard as JSON.
@@ -22,6 +23,9 @@ import { currentYearMonth, isValidYearMonth, monthLabel } from "@/lib/utils/mont
 // copy link and owner/vendor mobile numbers are deliberately left out: this is a
 // fuel + mileage feed, not a vehicle-document feed.
 export const dynamic = "force-dynamic";
+// The GPS refresh below makes one provider call per tracked vehicle, exactly like
+// the dashboard's "Sync GPS Data" button, so give it the same headroom.
+export const maxDuration = 60;
 
 const CORS = {
   // Open API → allow cross-origin reads from any site/app.
@@ -197,6 +201,155 @@ function serialiseLog(log: FuelLogEntry) {
   };
 }
 
+// ── Live GPS refresh ─────────────────────────────────────────────────────────
+// Every response carries GPS distance and mileage, so before answering we pull
+// fresh distances from the tracking providers — the same two syncs the Fuel
+// Dashboard's "Sync GPS Data" button runs (lib/gps-distance.ts).
+//
+// It is throttled rather than run blindly, because this endpoint is public and a
+// sync is one HTTP call per tracked vehicle against Millitrack / WheelsEye:
+//
+//   - `refresh=auto` (default) syncs only when the selection's GPS data is older
+//     than FRESH_MS, so back-to-back callers share one sync instead of hammering
+//     the providers (and getting the fleet's account rate-limited).
+//   - `refresh=force` skips that window but still honours HARD_FLOOR_MS.
+//   - `refresh=off` serves what's already stored — the fast path.
+//
+// The sync is scoped to the vehicles the request actually selected, so
+// `?reg=UP41CT6926&refresh=force` costs one provider call, not fifty.
+
+/** Data younger than this is treated as fresh under `refresh=auto`. */
+const FRESH_MS = 5 * 60 * 1000;
+/** No sync ever runs closer together than this, `refresh=force` included. */
+const HARD_FLOOR_MS = 60 * 1000;
+/** Answer even if the providers are slow; the stored data is still returned. */
+const SYNC_BUDGET_MS = 45 * 1000;
+
+type RefreshMode = "auto" | "force" | "off";
+
+type GpsSyncReport = {
+  ran: boolean;
+  mode: RefreshMode;
+  reason: string | null;
+  vehicles_synced?: number;
+  months_updated?: number;
+  segments_updated?: number;
+  failed?: number;
+  took_ms?: number;
+  timed_out?: boolean;
+  error?: string;
+  data_synced_at: string | null;
+};
+
+/**
+ * One sync at a time per server instance. Concurrent callers await the same run
+ * instead of each firing their own volley at the GPS providers.
+ */
+let inFlightSync: Promise<{ vehicles: number; months: number; segments: number; failed: number }> | null = null;
+
+async function runSync(ids: Set<string>, syncMonthly: boolean) {
+  if (inFlightSync) return inFlightSync;
+  inFlightSync = (async () => {
+    // Monthly distance only ever moves for the current month, so a past-month
+    // query gains nothing from that half and we skip it. Segment distances feed
+    // mileage in every month, so those always run.
+    const monthly = syncMonthly ? await syncMonthlyGpsDistance(ids) : null;
+    const segments = await syncFuelSegmentDistances(ids);
+    return {
+      vehicles: Math.max(monthly?.vehicles ?? 0, segments.vehicles),
+      months: monthly?.months ?? 0,
+      segments: segments.segments,
+      failed: (monthly?.failed ?? 0) + segments.failed,
+    };
+  })();
+  try {
+    return await inFlightSync;
+  } finally {
+    inFlightSync = null;
+  }
+}
+
+async function refreshGps(selected: FleetVehicle[], period: Period, mode: RefreshMode): Promise<GpsSyncReport> {
+  const currentMonth = currentYearMonth();
+  const tracked = selected.filter((vehicle) => Boolean(vehicle.gps_device_id));
+
+  // Freshness comes from the current-month rows: a tracked vehicle with no row
+  // has never been synced this month and counts as stale.
+  const syncedAt = await getGpsSyncTimes(currentMonth);
+  const stamps = tracked
+    .map((vehicle) => syncedAt.get(vehicle.vehicle_id))
+    .filter((stamp): stamp is string => Boolean(stamp))
+    .map((stamp) => Date.parse(stamp))
+    .filter((ms) => !Number.isNaN(ms));
+  const newest = stamps.length > 0 ? Math.max(...stamps) : null;
+  const oldest = stamps.length === tracked.length && stamps.length > 0 ? Math.min(...stamps) : null;
+  const lastSyncedAt = newest ? new Date(newest).toISOString() : null;
+
+  const skip = (reason: string): GpsSyncReport => ({ ran: false, mode, reason, data_synced_at: lastSyncedAt });
+
+  if (mode === "off") return skip("refresh=off — serving stored GPS data");
+  if (tracked.length === 0) return skip("no GPS-tracked vehicles in this selection");
+
+  const sinceNewest = newest ? Date.now() - newest : Number.POSITIVE_INFINITY;
+  if (sinceNewest < HARD_FLOOR_MS) {
+    return skip(`synced ${Math.round(sinceNewest / 1000)}s ago — inside the ${HARD_FLOOR_MS / 1000}s minimum interval`);
+  }
+  // `oldest` is null when some tracked vehicle has no row at all → stale.
+  if (mode === "auto" && oldest !== null && Date.now() - oldest < FRESH_MS) {
+    return skip(`already synced within the last ${FRESH_MS / 60000} minutes`);
+  }
+
+  const startedAt = Date.now();
+  const ids = new Set(tracked.map((vehicle) => vehicle.vehicle_id));
+  const syncMonthly = period.allTime || (period.months?.includes(currentMonth) ?? false);
+
+  try {
+    const timeout = Symbol("timeout");
+    const result = await Promise.race([
+      runSync(ids, syncMonthly),
+      new Promise<typeof timeout>((resolve) => setTimeout(() => resolve(timeout), SYNC_BUDGET_MS)),
+    ]);
+
+    if (result === timeout) {
+      // The sync keeps running; we answer now with whatever has already landed
+      // rather than letting the request hit the platform's hard timeout.
+      return {
+        ran: true,
+        mode,
+        reason: `GPS providers still responding after ${SYNC_BUDGET_MS / 1000}s — returning the data synced so far`,
+        timed_out: true,
+        took_ms: Date.now() - startedAt,
+        data_synced_at: lastSyncedAt,
+      };
+    }
+
+    return {
+      ran: true,
+      mode,
+      reason: null,
+      vehicles_synced: result.vehicles,
+      months_updated: result.months,
+      segments_updated: result.segments,
+      failed: result.failed,
+      took_ms: Date.now() - startedAt,
+      timed_out: false,
+      data_synced_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    // A provider outage must not take the endpoint down — serve stored data.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[api/public/fuel] GPS refresh failed:", message);
+    return {
+      ran: false,
+      mode,
+      reason: "GPS refresh failed — serving the last stored data",
+      error: message,
+      took_ms: Date.now() - startedAt,
+      data_synced_at: lastSyncedAt,
+    };
+  }
+}
+
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS });
 }
@@ -253,6 +406,23 @@ export async function GET(request: Request) {
     return badRequest(`Unknown order "${order}".`, "Valid values: asc, desc.");
   }
 
+  const refreshParam = (searchParams.get("refresh") ?? "auto").trim().toLowerCase();
+  const REFRESH_ALIASES: Record<string, RefreshMode> = {
+    auto: "auto",
+    force: "force",
+    "1": "force",
+    true: "force",
+    yes: "force",
+    off: "off",
+    "0": "off",
+    false: "off",
+    no: "off",
+  };
+  const refresh = REFRESH_ALIASES[refreshParam];
+  if (!refresh) {
+    return badRequest(`Unknown refresh "${refreshParam}".`, "Valid values: auto (default), force, off.");
+  }
+
   const filters = {
     reg: (searchParams.get("reg") ?? "").trim(),
     frt: (searchParams.get("frt") ?? "").trim(),
@@ -263,7 +433,7 @@ export async function GET(request: Request) {
   };
 
   // ── Data (whole fleet — no profile means no permission filtering) ──────────
-  const [vehicles, allLogs, gpsRows] = await Promise.all([getVehicles(), getAllFuelLogs(), getAllGpsDistance()]);
+  const vehicles = await getVehicles();
 
   // A location filter matches either the UUID or a case-insensitive part of the name.
   const matchesLocation = (name: string | null, id: string | null, query: string) => {
@@ -290,6 +460,13 @@ export async function GET(request: Request) {
       matchesLocation(vehicle.substation, vehicle.substation_id, filters.substation) &&
       (!filters.vendor || norm(vehicle.vendor_name ?? "").includes(norm(filters.vendor))),
   );
+
+  // Pull fresh distances from the GPS providers BEFORE reading the fuel logs and
+  // distance rows, so the mileage below is computed on what was just written.
+  // (Both readers are cache()-wrapped per request and are first called after this.)
+  const gpsSync = await refreshGps(selected, period, refresh);
+
+  const [allLogs, gpsRows] = await Promise.all([getAllFuelLogs(), getAllGpsDistance()]);
 
   const logsByVehicle = new Map<string, FuelLogEntry[]>();
   for (const log of allLogs) {
@@ -404,7 +581,9 @@ export async function GET(request: Request) {
           sort,
           order: order || null,
           include: Array.from(include),
+          refresh,
         },
+        gps_sync: gpsSync,
         vehicle_count: rows.length,
         fleet_size: vehicles.length,
       },

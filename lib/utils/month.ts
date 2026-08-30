@@ -15,12 +15,20 @@ export function currentYearMonth() {
 }
 
 export function isValidYearMonth(value: string | undefined): value is string {
-  return Boolean(value && /^\d{4}-\d{2}$/.test(value));
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) return false;
+  // The month part must be a real month. Without this, "2026-13" passes the shape
+  // check and Date() rolls it over — the page/API would silently label it
+  // "January 2027" and report an empty month instead of rejecting the input.
+  const month = Number(value.slice(5));
+  return month >= 1 && month <= 12;
 }
 
 export function monthLabel(yearMonth: string) {
   const [year, mon] = yearMonth.split("-").map(Number);
-  return new Date(year, mon - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const date = new Date(year, mon - 1, 1);
+  // new Date(y, …) maps years 0-99 to 1900-1999; setFullYear pins the real year.
+  date.setFullYear(year);
+  return date.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
 export function prevMonth(yearMonth: string) {
