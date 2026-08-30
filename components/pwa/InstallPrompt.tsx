@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Download, Share, X } from "lucide-react";
 
 type BeforeInstallPromptEvent = Event & {
@@ -14,9 +15,14 @@ export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [iosHint, setIosHint] = useState(false);
   const [show, setShow] = useState(false);
+  // /api-docs is a public reference page shared with people outside the fleet —
+  // an "install our app" banner over it is noise, not an offer.
+  const pathname = usePathname();
+  const isPublicDocs = pathname?.startsWith("/api-docs") ?? false;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isPublicDocs) return;
 
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
@@ -47,7 +53,7 @@ export function InstallPrompt() {
       window.removeEventListener("beforeinstallprompt", onBIP);
       window.removeEventListener("appinstalled", onInstalled);
     };
-  }, []);
+  }, [isPublicDocs]);
 
   const dismiss = () => {
     setShow(false);
@@ -66,7 +72,9 @@ export function InstallPrompt() {
     setShow(false);
   };
 
-  if (!show) return null;
+  // Also covers arriving on /api-docs from inside the app, where `show` is
+  // already true and the effect above can no longer un-set it.
+  if (!show || isPublicDocs) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-[70] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

@@ -3,8 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // /api/cron/* secures itself via CRON_SECRET (see app/api/cron/*), so it must
 // bypass the Supabase session gate — cron requests carry no auth cookie.
-// /api/public/* is intentionally open (unauthenticated read-only JSON).
-const publicPaths = ["/login", "/forgot-password", "/api/cron", "/api/public"];
+// /api/public/* is intentionally open (unauthenticated read-only JSON), and
+// /api-docs is its public reference page — both are meant to be shared as links.
+const publicPaths = ["/login", "/forgot-password", "/api/cron", "/api/public", "/api-docs"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

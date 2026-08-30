@@ -14,10 +14,10 @@ const nextConfig = {
       // match holds across Next versions.
       "/frt-directory/pdf": ["./node_modules/@sparticuz/chromium/**/*"],
       "/frt-directory/pdf/route": ["./node_modules/@sparticuz/chromium/**/*"],
-      // /api/public/docs reads docs/public-api.md off disk at request time; tracing
+      // /api-docs renders docs/public-api.md off disk at request time; tracing
       // can't see that path either, so ship the file with the function.
-      "/api/public/docs": ["./docs/public-api.md"],
-      "/api/public/docs/route": ["./docs/public-api.md"],
+      "/api-docs": ["./docs/public-api.md"],
+      "/api-docs/page": ["./docs/public-api.md"],
     },
   },
 };

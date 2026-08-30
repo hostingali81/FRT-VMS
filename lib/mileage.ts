@@ -118,3 +118,40 @@ export function computeMileageByFuel(logs: FuelLogEntry[]): FuelMileage[] {
 export function mileageByFuelForMonth(allLogs: FuelLogEntry[], yearMonth: string): FuelMileage[] {
   return computeMileageByFuel(allLogs.filter((l) => l.log_date.startsWith(yearMonth)));
 }
+
+/**
+ * Why `computeMileageByFuel` came back empty — a short, caller-facing sentence.
+ * Returns null when mileage IS available. Used by the public fuel API so a
+ * consumer can tell "not enough data yet" apart from "genuinely zero".
+ */
+export function mileageUnavailableReason(logs: FuelLogEntry[]): string | null {
+  if (computeMileageByFuel(logs).length > 0) return null;
+  if (logs.length === 0) return "no fuel entries in this window";
+
+  const groups = new Map<FuelLogType | null, FuelLogEntry[]>();
+  for (const log of logs) {
+    const key = log.fuel_type ?? null;
+    const group = groups.get(key);
+    if (group) group.push(log);
+    else groups.set(key, [log]);
+  }
+
+  const sized = Array.from(groups.values());
+  if (sized.every((group) => group.length < 2)) {
+    return "needs at least 2 fills of the same fuel type in this window";
+  }
+
+  // A group big enough to measure exists, so the blocker is a missing GPS segment
+  // (every fill but the window's first needs one) or a zero-litre denominator.
+  const missingSegment = sized.some(
+    (group) =>
+      group.length >= 2 &&
+      [...group]
+        .sort((a, b) => a.log_date.localeCompare(b.log_date))
+        .slice(1)
+        .some((log) => log.gps_distance_km == null),
+  );
+  if (missingSegment) return "GPS distance not synced yet for one or more fills in this window";
+
+  return "fuel burned in this window works out to zero";
+}

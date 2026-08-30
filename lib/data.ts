@@ -350,6 +350,27 @@ export const getGpsDistanceForMonth = cache(
   },
 );
 
+/**
+ * Every synced monthly GPS distance row, all vehicles, all months — the public
+ * fuel API needs whole-history distance, which the per-month reader can't give.
+ * The table holds one row per (vehicle, month), so this stays small.
+ */
+export const getAllGpsDistance = cache(async (): Promise<GpsDistanceMonth[]> => {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("vehicle_gps_distance")
+    .select("*")
+    .order("year_month", { ascending: false });
+
+  if (error) {
+    console.error("[data.ts] getAllGpsDistance failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as GpsDistanceMonth[];
+});
+
 export async function getFuelOwnershipHistory(vehicleId: string, profile?: UserProfile | null): Promise<FuelOwnershipHistoryItem[]> {
   if (profile) {
     const vehicle = await getVehicle(vehicleId, profile);
