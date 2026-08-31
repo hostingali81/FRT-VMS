@@ -16,6 +16,7 @@ import {
   statusSchema,
   transferSchema,
   vehicleSchema,
+  vehicleUpdateSchema,
 } from "@/lib/validations";
 import { istToday } from "@/lib/utils/month";
 
@@ -119,7 +120,7 @@ export async function updateVehicleAction(formData: FormData) {
   if (!vehicle || !canEditVehicle(profile, vehicle, lookups)) throw new Error("Unauthorized");
 
   const rawData = Object.fromEntries(formData.entries());
-  const validated = vehicleSchema.partial().safeParse(rawData);
+  const validated = vehicleUpdateSchema.safeParse(rawData);
 
   if (!validated.success) {
     const error = validated.error.issues[0].message;

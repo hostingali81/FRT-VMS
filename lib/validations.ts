@@ -41,6 +41,27 @@ export const vehicleSchema = z.object({
   notes: optionalText,
 });
 
+/**
+ * Editing an existing vehicle. Four columns are deliberately dropped:
+ *
+ *   status, fuel_ownership, driver_ownership — each is owned by a dedicated
+ *   action that goes through an RPC so the append-only history table gets a row
+ *   (change_vehicle_status / change_vehicle_fuel_ownership /
+ *   change_vehicle_driver_ownership). The edit form doesn't render them.
+ *   circle_id — the home circle is set once at creation; relocation goes through
+ *   transfer_vehicle, which writes vehicle_assignments + transfer history.
+ *
+ * They can't just be left to `.partial()`: Zod 4 keeps `.default()` alive through
+ * `.partial()`, so a key missing from the FormData still parses back as its
+ * default. That silently rewrote every edited vehicle to company fuel / company
+ * driver / active status, wiping the real value out of `vehicles` while the
+ * history tables still showed the truth. Omitting the keys is also what stops a
+ * hand-crafted POST from bypassing the history-writing RPCs.
+ */
+export const vehicleUpdateSchema = vehicleSchema
+  .omit({ status: true, fuel_ownership: true, driver_ownership: true, circle_id: true })
+  .partial();
+
 export const transferSchema = z.object({
   vehicle_id: z.string().uuid(),
   to_circle_id: z.string().uuid(),

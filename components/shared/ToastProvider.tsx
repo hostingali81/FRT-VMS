@@ -16,6 +16,13 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   driver: "Driver assigned successfully",
   driverby: "Driver source updated successfully",
   fuel: "Fuel ownership updated successfully",
+  // Fuel log add/edit/delete from a vehicle's Fuel Logs tab. The /fuel-log/add
+  // page has its own inline banners (?added / ?updated / ?deleted carry a
+  // registration, not "1"), but the in-profile flows redirected back with no
+  // feedback at all until these were listed here.
+  fuellog: "Fuel entry saved successfully",
+  fuelupdated: "Fuel entry updated successfully",
+  fueldeleted: "Fuel entry deleted",
 };
 
 // Friendly messages for the machine-readable error codes used in redirects.

@@ -323,7 +323,11 @@ export function VehicleProfileTabs({
                             <input type="hidden" name="vehicle_id" value={vehicle.vehicle_id} />
                             <div className="space-y-1.5">
                               <Label>New Status</Label>
-                              <Select name="status" required>
+                              {/* Pre-select the current status (like the fuel/driver
+                                  forms below). Without it the list opened on "Active",
+                                  so submitting for a note/date tweak silently flipped a
+                                  maintenance or breakdown vehicle back to active. */}
+                              <Select name="status" defaultValue={vehicle.status} required>
                                 <option value="active">Active</option>
                                 <option value="maintenance">Maintenance</option>
                                 <option value="breakdown">Breakdown</option>

@@ -103,8 +103,12 @@ async function selectAllRows<T>(table: string, fallback: T[], orderColumn: strin
 // query (rather than only on the profile-keyed wrapper) means the DB round trip
 // dedupes across callers AND can be started before the profile is known.
 const fetchVehicles = cache(() => selectRows<FleetVehicle>("vehicle_current_view", mockVehicles, "registration_no"));
-const fetchTransfers = cache(() => selectRows<TransferRecord>("transfer_history_view", mockTransfers, "transfer_date"));
-const fetchStatusHistory = cache(() => selectRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date"));
+// Paged, not selectRows: both are append-only and grow for the life of the fleet.
+// A plain select is cut off at PostgREST's "Max rows" (1000), which would quietly
+// drop the oldest transfers/status changes off /vehicle-history and /reports with
+// no error — the records would still be in the DB but invisible.
+const fetchTransfers = cache(() => selectAllRows<TransferRecord>("transfer_history_view", mockTransfers, "transfer_date"));
+const fetchStatusHistory = cache(() => selectAllRows<StatusHistoryItem>("vehicle_status_history", mockStatusHistory, "from_date"));
 const fetchDrivers = cache(() => selectRows<DriverRecord>("driver_current_view", mockDrivers, "name"));
 const fetchActivity = cache(() => selectRows<ActivityItem>("activity_feed_view", mockActivity, "created_at"));
 

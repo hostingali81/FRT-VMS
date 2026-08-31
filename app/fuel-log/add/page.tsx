@@ -52,9 +52,6 @@ export default async function AddFuelEntryPage({
     .sort((a, b) => a.registration_no.localeCompare(b.registration_no))
     .map(toOption);
 
-  const page = Math.max(1, parseInt(searchParams.page || "1", 10));
-  const offset = (page - 1) * RECENT_LIMIT;
-
   // Newest first — same tie-break as the Fuel Log page (date, then insert order).
   const sortedFilteredLogs = allFuelLogs
     .filter((log) => manageableById.has(log.vehicle_id))
@@ -62,8 +59,16 @@ export default async function AddFuelEntryPage({
       if (a.log_date !== b.log_date) return b.log_date.localeCompare(a.log_date);
       return (b.created_at ?? "").localeCompare(a.created_at ?? "");
     });
-    
-  const totalPages = Math.ceil(sortedFilteredLogs.length / RECENT_LIMIT);
+
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredLogs.length / RECENT_LIMIT));
+  // ?page= is user-editable, so clamp it to a real page. Math.max alone let a
+  // non-numeric value through as NaN (Math.max(1, NaN) is NaN) and a too-large
+  // number past the end — both rendered an empty table under a "page NaN of 3"
+  // label instead of falling back to a page that exists.
+  const requestedPage = parseInt(searchParams.page ?? "", 10);
+  const page = Number.isFinite(requestedPage) ? Math.min(Math.max(1, requestedPage), totalPages) : 1;
+  const offset = (page - 1) * RECENT_LIMIT;
+
   const recentLogs = sortedFilteredLogs.slice(offset, offset + RECENT_LIMIT);
 
   const recentEntries: FuelLogRow[] = recentLogs.map((log) => {

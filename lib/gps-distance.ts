@@ -195,9 +195,16 @@ type SegmentVehicle = {
   gps_company: string | null;
 };
 
-/** Absolute instant for a fill: its exact logged_at if set, else the date's midnight. */
+/**
+ * Absolute instant for a fill: its exact logged_at if set, else the date's midnight
+ * IST. The +05:30 matters — a bare `...T00:00:00.000Z` is 05:30 IST, which shifted
+ * every date-only segment window half a day forward and could order a date-only
+ * fill AFTER a timed early-morning fill on the same day (making the segment come
+ * out backwards, so it was written as 0 km). log_date is entered and read as an IST
+ * calendar date everywhere else in the app.
+ */
 const fuelLogInstant = (log: { log_date: string; logged_at: string | null }) =>
-  log.logged_at ? Date.parse(log.logged_at) : Date.parse(`${log.log_date}T00:00:00.000Z`);
+  log.logged_at ? Date.parse(log.logged_at) : Date.parse(`${log.log_date}T00:00:00+05:30`);
 
 /** Distance (km) for one segment window, picking the provider from gps_company. */
 async function segmentDistanceKm(

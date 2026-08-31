@@ -59,22 +59,31 @@ export function VehicleForm({
               <option>EV</option>
             </Select>
           </Field>
-          {!vehicle ? (
-            <Field label="Fuel By">
-              <Select name="fuel_ownership" defaultValue="company">
-                <option value="company">Company Fuel</option>
-                <option value="vendor">Vendor Fuel</option>
-              </Select>
-            </Field>
-          ) : null}
-          {!vehicle ? (
-            <Field label="Driver By">
-              <Select name="driver_ownership" defaultValue="company">
-                <option value="company">Company Driver</option>
-                <option value="vendor">Vendor Driver</option>
-              </Select>
-            </Field>
-          ) : null}
+          {/* Fuel By / Driver By are only editable at creation. Afterwards each change
+              has to open a dated row in its ownership history table, which only the
+              Actions panel on the vehicle profile does (via the RPC). Shown disabled
+              here so the current value is still visible while editing — a disabled
+              control submits nothing, and updateVehicleAction ignores these keys. */}
+          <Field label="Fuel By">
+            <Select
+              name="fuel_ownership"
+              defaultValue={vehicle?.fuel_ownership ?? "company"}
+              disabled={Boolean(vehicle)}
+            >
+              <option value="company">Company Fuel</option>
+              <option value="vendor">Vendor Fuel</option>
+            </Select>
+          </Field>
+          <Field label="Driver By">
+            <Select
+              name="driver_ownership"
+              defaultValue={vehicle?.driver_ownership ?? "company"}
+              disabled={Boolean(vehicle)}
+            >
+              <option value="company">Company Driver</option>
+              <option value="vendor">Vendor Driver</option>
+            </Select>
+          </Field>
           <Field label="Model Year">
             <Input name="model_year" type="number" min="1990" max="2035" placeholder="2023" defaultValue={vehicle?.model_year ?? ""} />
           </Field>
