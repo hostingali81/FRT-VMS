@@ -8,6 +8,12 @@ import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { LinkButton } from "@/components/ui/button";
 import { QuickFuelForm, type FuelLogDraft } from "@/components/fuel/QuickFuelForm";
+import {
+  FuelLogFilters,
+  countActiveFuelLogFilters,
+  type FuelLogFilterOptions,
+  type FuelLogFilterValues,
+} from "@/components/fuel/FuelLogFilters";
 import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -53,7 +59,12 @@ export function FuelLogEditTable({
   today,
   page = 1,
   totalPages = 1,
+  matchCount,
+  filters,
+  filterOptions,
+  filterQuery = "",
 }: {
+  /** The current page's rows — already filtered and paginated on the server. */
   entries: FuelLogRow[];
   vehicles: VehicleOption[];
   updateAction: (formData: FormData) => Promise<void>;
@@ -61,12 +72,24 @@ export function FuelLogEditTable({
   today: string;
   page?: number;
   totalPages?: number;
+  /** How many entries match the filters in total, across every page. */
+  matchCount: number;
+  filters: FuelLogFilterValues;
+  filterOptions: FuelLogFilterOptions;
+  /** The filters as a query string, so paging and corrections keep this view. */
+  filterQuery?: string;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const editing = entries.find((e) => e.id === editingId) ?? null;
   const confirming = entries.find((e) => e.id === confirmId) ?? null;
+
+  const activeFilters = countActiveFuelLogFilters(filters);
+  const pageHref = (target: number) => `?${filterQuery ? `${filterQuery}&` : ""}page=${target}`;
+  // Round-tripped through the edit/delete forms so a correction returns to the
+  // same filtered page instead of dumping the user back at an unfiltered page 1.
+  const returnQuery = `${filterQuery ? `${filterQuery}&` : ""}page=${page}`;
 
   return (
     <>
@@ -75,15 +98,27 @@ export function FuelLogEditTable({
           <div className="flex items-center justify-between gap-3">
             <CardTitle>Recent Entries</CardTitle>
             <span className="text-xs text-slate-500">
-              {entries.length} {entries.length === 1 ? "entry" : "entries"}
+              {matchCount} {matchCount === 1 ? "entry" : "entries"}
+              {activeFilters > 0 ? " matched" : ""}
             </span>
           </div>
         </CardHeader>
 
+        <FuelLogFilters values={filters} options={filterOptions} />
+
         {entries.length === 0 ? (
           <CardContent className="py-10 text-center">
-            <p className="text-sm font-medium text-slate-600">No fuel entries yet</p>
-            <p className="mt-1 text-xs text-slate-400">Add the first entry using the form above.</p>
+            {activeFilters > 0 ? (
+              <>
+                <p className="text-sm font-medium text-slate-600">In filters se koi entry nahi mili</p>
+                <p className="mt-1 text-xs text-slate-400">Filters badlo ya Clear dabao.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-slate-600">No fuel entries yet</p>
+                <p className="mt-1 text-xs text-slate-400">Add the first entry using the form above.</p>
+              </>
+            )}
           </CardContent>
         ) : (
           <div className="overflow-x-auto">
@@ -163,7 +198,7 @@ export function FuelLogEditTable({
           <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
             <div className="flex flex-1 justify-between sm:hidden">
               <LinkButton
-                href={`?page=${page - 1}`}
+                href={pageHref(page - 1)}
                 variant="outline"
                 className={page <= 1 ? "pointer-events-none opacity-50" : ""}
                 aria-disabled={page <= 1}
@@ -171,7 +206,7 @@ export function FuelLogEditTable({
                 Previous
               </LinkButton>
               <LinkButton
-                href={`?page=${page + 1}`}
+                href={pageHref(page + 1)}
                 variant="outline"
                 className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
                 aria-disabled={page >= totalPages}
@@ -188,7 +223,7 @@ export function FuelLogEditTable({
               <div>
                 <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                   <LinkButton
-                    href={`?page=${page - 1}`}
+                    href={pageHref(page - 1)}
                     variant="outline"
                     className={`rounded-l-md rounded-r-none ${page <= 1 ? "pointer-events-none opacity-50" : ""}`}
                     aria-disabled={page <= 1}
@@ -197,7 +232,7 @@ export function FuelLogEditTable({
                     <span className="sr-only">Previous</span>
                   </LinkButton>
                   <LinkButton
-                    href={`?page=${page + 1}`}
+                    href={pageHref(page + 1)}
                     variant="outline"
                     className={`rounded-l-none rounded-r-md ${page >= totalPages ? "pointer-events-none opacity-50" : ""}`}
                     aria-disabled={page >= totalPages}
@@ -227,6 +262,7 @@ export function FuelLogEditTable({
             action={updateAction}
             today={today}
             returnTo="add"
+            returnQuery={returnQuery}
             onCancel={() => setEditingId(null)}
           />
         )}
@@ -268,6 +304,7 @@ export function FuelLogEditTable({
             <form action={deleteAction} className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <input type="hidden" name="log_id" value={confirming.id} />
               <input type="hidden" name="return_to" value="add" />
+              <input type="hidden" name="return_query" value={returnQuery} />
               <button
                 type="button"
                 onClick={() => setConfirmId(null)}

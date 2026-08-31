@@ -5,10 +5,16 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuickFuelForm } from "@/components/fuel/QuickFuelForm";
 import { FuelLogEditTable, type FuelLogRow } from "@/components/fuel/FuelLogEditTable";
+import {
+  fuelLogFilterQuery,
+  type FuelLogFilterOptions,
+  type FuelLogFilterValues,
+} from "@/components/fuel/FuelLogFilters";
 import { addFuelLogAction, deleteFuelLogAction, updateFuelLogAction } from "@/lib/actions/vehicle-actions";
 import { requireProfile } from "@/lib/auth";
 import { getAllFuelLogs, getAllLookups, getVehicles, preloadFleetData } from "@/lib/data";
 import { canEditVehicle } from "@/lib/permissions";
+import { FUEL_LOG_TYPES } from "@/lib/types";
 import { istToday } from "@/lib/utils/month";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +22,43 @@ export const dynamic = "force-dynamic";
 /** How many of the most recent entries the correction table shows. */
 const RECENT_LIMIT = 25;
 
+/**
+ * FNV-1a over the fields a correction can change. Same value in, same value out,
+ * and it only moves when an entry is actually added, edited or deleted.
+ */
+function entriesSignature(
+  logs: { id: string; log_date: string; logged_at?: string | null; fuel_type: string | null; fuel_litres: number; fuel_amount: number | null; notes: string | null }[],
+) {
+  let hash = 0x811c9dc5;
+  for (const log of logs) {
+    const row = `${log.id}:${log.log_date}:${log.logged_at ?? ""}:${log.fuel_type ?? ""}:${log.fuel_litres}:${log.fuel_amount ?? ""}:${log.notes ?? ""}`;
+    for (let i = 0; i < row.length; i += 1) {
+      hash ^= row.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  }
+  return (hash >>> 0).toString(16);
+}
+
 export default async function AddFuelEntryPage({
   searchParams,
 }: {
-  searchParams: { added?: string; updated?: string; deleted?: string; resync?: string; error?: string; page?: string };
+  searchParams: {
+    added?: string;
+    updated?: string;
+    deleted?: string;
+    resync?: string;
+    error?: string;
+    page?: string;
+    // Recent Entries filters — see components/fuel/FuelLogFilters.tsx.
+    q?: string;
+    by?: string;
+    div?: string;
+    sub?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+  };
 }) {
   // Start the fleet queries while the auth round trips are still in flight.
   preloadFleetData();
@@ -53,13 +92,78 @@ export default async function AddFuelEntryPage({
     .map(toOption);
 
   // Newest first — same tie-break as the Fuel Log page (date, then insert order).
-  const sortedFilteredLogs = allFuelLogs
+  const visibleLogs = allFuelLogs
     .filter((log) => manageableById.has(log.vehicle_id))
     .sort((a, b) => {
       if (a.log_date !== b.log_date) return b.log_date.localeCompare(a.log_date);
       return (b.created_at ?? "").localeCompare(a.created_at ?? "");
     });
 
+  // ── Recent Entries filters ────────────────────────────────────────────────
+  // Applied here rather than in the client component: the table is paginated on
+  // the server, so filtering after the slice would only ever search the 25 rows
+  // on screen instead of every entry the user can see.
+  const filters: FuelLogFilterValues = {
+    q: (searchParams.q ?? "").trim(),
+    by: (searchParams.by ?? "").trim(),
+    div: (searchParams.div ?? "").trim(),
+    sub: (searchParams.sub ?? "").trim(),
+    type: (searchParams.type ?? "").trim(),
+    from: (searchParams.from ?? "").trim(),
+    to: (searchParams.to ?? "").trim(),
+  };
+
+  // Options come from the UNFILTERED visible set, so narrowing by one filter
+  // never empties another's dropdown and strands the user.
+  const loggedVehicles = Array.from(new Set(visibleLogs.map((log) => log.vehicle_id))).map(
+    (id) => manageableById.get(id)!,
+  );
+  const uniqueBy = <T, K extends string>(rows: T[], key: (row: T) => K | null) => {
+    const seen = new Map<K, T>();
+    for (const row of rows) {
+      const id = key(row);
+      if (id && !seen.has(id)) seen.set(id, row);
+    }
+    return Array.from(seen.values());
+  };
+  const filterOptions: FuelLogFilterOptions = {
+    people: Array.from(new Set(visibleLogs.map((log) => log.recorded_by).filter(Boolean) as string[])).sort((a, b) =>
+      a.localeCompare(b),
+    ),
+    divisions: uniqueBy(loggedVehicles, (v) => v.division_id)
+      .map((v) => ({ id: v.division_id as string, name: v.division ?? "Unassigned" }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    substations: uniqueBy(loggedVehicles, (v) => v.substation_id)
+      .map((v) => ({
+        id: v.substation_id as string,
+        name: v.substation ?? "Unassigned",
+        divisionId: v.division_id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    // Keep the canonical Diesel/Petrol/CNG order rather than whatever the logs
+    // happen to contain first.
+    fuelTypes: FUEL_LOG_TYPES.filter((type) => visibleLogs.some((log) => log.fuel_type === type)),
+  };
+
+  // Registration/FRT search ignores case, spaces and punctuation, so "up41 ct6929"
+  // and "frt3" both hit — the same normalisation the public fuel API uses.
+  const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const queryTerm = norm(filters.q);
+  const sortedFilteredLogs = visibleLogs.filter((log) => {
+    const vehicle = manageableById.get(log.vehicle_id)!;
+    if (queryTerm && !norm(vehicle.registration_no).includes(queryTerm) && !norm(vehicle.frt_no ?? "").includes(queryTerm)) {
+      return false;
+    }
+    if (filters.by && log.recorded_by !== filters.by) return false;
+    if (filters.div && vehicle.division_id !== filters.div) return false;
+    if (filters.sub && vehicle.substation_id !== filters.sub) return false;
+    if (filters.type && log.fuel_type !== filters.type) return false;
+    if (filters.from && log.log_date < filters.from) return false;
+    if (filters.to && log.log_date > filters.to) return false;
+    return true;
+  });
+
+  const filterQuery = fuelLogFilterQuery(filters);
   const totalPages = Math.max(1, Math.ceil(sortedFilteredLogs.length / RECENT_LIMIT));
   // ?page= is user-editable, so clamp it to a real page. Math.max alone let a
   // non-numeric value through as NaN (Math.max(1, NaN) is NaN) and a too-large
@@ -107,9 +211,12 @@ export default async function AddFuelEntryPage({
   // client state across a same-route navigation — the add form would hold the
   // values just saved and the edit card would stay open on the row just updated.
   // Keying both on the saved data remounts them whenever a row actually changed.
-  const dataKey = recentEntries
-    .map((e) => `${e.id}:${e.log_date}:${e.logged_at ?? ""}:${e.fuel_type ?? ""}:${e.fuel_litres}:${e.fuel_amount ?? ""}`)
-    .join("|");
+  //
+  // Built from EVERY visible entry, not the current page: filtering and paging
+  // change which rows are on screen without changing any of them, and keying on
+  // the page would remount the add form mid-typing every time the user touched a
+  // filter. A short hash keeps it out of the payload as the log grows.
+  const dataKey = entriesSignature(visibleLogs);
 
   return (
     <AppShell profile={profile}>
@@ -182,6 +289,10 @@ export default async function AddFuelEntryPage({
               today={today}
               page={page}
               totalPages={totalPages}
+              matchCount={sortedFilteredLogs.length}
+              filters={filters}
+              filterOptions={filterOptions}
+              filterQuery={filterQuery}
             />
           </div>
         )}

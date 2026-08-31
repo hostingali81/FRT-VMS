@@ -61,6 +61,7 @@ export function QuickFuelForm({
   action,
   today,
   returnTo = "add",
+  returnQuery,
   locked = false,
   entry,
   onCancel,
@@ -70,6 +71,9 @@ export function QuickFuelForm({
   today: string;
   /** Value for the hidden return_to field — "add" returns to /fuel-log/add, otherwise back to the vehicle profile. */
   returnTo?: string;
+  /** Filter/page query the action should re-apply on redirect, so correcting an
+   *  entry returns to the same filtered list instead of an unfiltered page 1. */
+  returnQuery?: string;
   /** When true the vehicle is fixed (vehicles[0]) and shown as a label instead of a dropdown. */
   locked?: boolean;
   /** Present → editing this fill instead of adding a new one. */
@@ -118,6 +122,7 @@ export function QuickFuelForm({
   return (
     <form action={action} className="space-y-6">
       <input type="hidden" name="return_to" value={returnTo} />
+      {returnQuery ? <input type="hidden" name="return_query" value={returnQuery} /> : null}
       <input type="hidden" name="fuel_type" value={fuelType} />
       {entry && <input type="hidden" name="log_id" value={entry.id} />}
 

@@ -366,6 +366,27 @@ async function resetFuelSegments(
     .in("id", ids);
 }
 
+/**
+ * Filter/pagination params the /fuel-log/add correction table round-trips, so a
+ * fix lands back on the list the user was looking at. Whitelisted and rebuilt
+ * from scratch, so the form can't smuggle anything else (an `error=` banner, a
+ * second `updated=`) into the redirect's query string.
+ */
+const FUEL_LOG_VIEW_PARAMS = ["q", "by", "div", "sub", "type", "from", "to", "page"] as const;
+
+function fuelLogViewQuery(formData: FormData) {
+  const raw = formData.get("return_query");
+  if (typeof raw !== "string" || !raw) return "";
+  const incoming = new URLSearchParams(raw);
+  const kept = new URLSearchParams();
+  for (const key of FUEL_LOG_VIEW_PARAMS) {
+    const value = incoming.get(key);
+    if (value) kept.set(key, value);
+  }
+  const query = kept.toString();
+  return query ? `&${query}` : "";
+}
+
 export async function addFuelLogAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
@@ -429,9 +450,10 @@ export async function updateFuelLogAction(formData: FormData) {
   const lookups = await getAllLookups();
   const rawData = Object.fromEntries(formData.entries());
   const fromAddPage = formData.get("return_to") === "add";
+  const viewQuery = fuelLogViewQuery(formData);
   const errorBack = (msg: string) =>
     fromAddPage
-      ? `/fuel-log/add?error=${encodeURIComponent(msg)}`
+      ? `/fuel-log/add?error=${encodeURIComponent(msg)}${viewQuery}`
       : `/vehicles/${rawData.vehicle_id}?error=${encodeURIComponent(msg)}&tab=Fuel+Logs`;
 
   const validated = fuelLogUpdateSchema.safeParse(rawData);
@@ -508,7 +530,7 @@ export async function updateFuelLogAction(formData: FormData) {
   revalidatePath("/fuel-log/add");
   redirect(
     fromAddPage
-      ? `/fuel-log/add?updated=${encodeURIComponent(targetVehicle.registration_no)}${chainMoved ? "&resync=1" : ""}`
+      ? `/fuel-log/add?updated=${encodeURIComponent(targetVehicle.registration_no)}${chainMoved ? "&resync=1" : ""}${viewQuery}`
       : `/vehicles/${data.vehicle_id}?fuelupdated=1&tab=Fuel+Logs`,
   );
 }
@@ -518,11 +540,12 @@ export async function deleteFuelLogAction(formData: FormData) {
   const profile = await requireProfile();
   const lookups = await getAllLookups();
   const fromAddPage = formData.get("return_to") === "add";
+  const viewQuery = fuelLogViewQuery(formData);
   const validated = fuelLogDeleteSchema.safeParse(Object.fromEntries(formData.entries()));
 
   const errorBack = (msg: string, vehicleId?: string) =>
     fromAddPage
-      ? `/fuel-log/add?error=${encodeURIComponent(msg)}`
+      ? `/fuel-log/add?error=${encodeURIComponent(msg)}${viewQuery}`
       : `/vehicles/${vehicleId ?? ""}?error=${encodeURIComponent(msg)}&tab=Fuel+Logs`;
 
   if (!validated.success) redirect(errorBack("Invalid fuel entry"));
@@ -555,7 +578,7 @@ export async function deleteFuelLogAction(formData: FormData) {
   revalidatePath("/fuel-log/add");
   redirect(
     fromAddPage
-      ? `/fuel-log/add?deleted=${encodeURIComponent(vehicle.registration_no)}`
+      ? `/fuel-log/add?deleted=${encodeURIComponent(vehicle.registration_no)}${viewQuery}`
       : `/vehicles/${vehicleId}?fueldeleted=1&tab=Fuel+Logs`,
   );
 }
