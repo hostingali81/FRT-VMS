@@ -5,48 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form";
-
-/** Every filter the Recent Entries table understands. Empty string = not applied. */
-export type FuelLogFilterValues = {
-  q: string;
-  by: string;
-  div: string;
-  sub: string;
-  type: string;
-  from: string;
-  to: string;
-};
-
-export type FuelLogFilterOptions = {
-  /** Distinct `recorded_by` names on the entries this user can see. */
-  people: string[];
-  divisions: { id: string; name: string }[];
-  substations: { id: string; name: string; divisionId: string | null }[];
-  fuelTypes: string[];
-};
-
-export const EMPTY_FUEL_LOG_FILTERS: FuelLogFilterValues = {
-  q: "",
-  by: "",
-  div: "",
-  sub: "",
-  type: "",
-  from: "",
-  to: "",
-};
-
-/** Serialise for a URL — drops blanks so a cleared filter leaves no trace. */
-export function fuelLogFilterQuery(values: FuelLogFilterValues): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(values)) {
-    if (value) params.set(key, value);
-  }
-  return params.toString();
-}
-
-export function countActiveFuelLogFilters(values: FuelLogFilterValues): number {
-  return Object.values(values).filter(Boolean).length;
-}
+import {
+  EMPTY_FUEL_LOG_FILTERS,
+  countActiveFuelLogFilters,
+  fuelLogFilterQuery,
+  type FuelLogFilterOptions,
+  type FuelLogFilterValues,
+} from "@/lib/fuel-log-filters";
 
 /**
  * Filters for the Recent Entries table on /fuel-log/add.

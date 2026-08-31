@@ -8,12 +8,12 @@ import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { LinkButton } from "@/components/ui/button";
 import { QuickFuelForm, type FuelLogDraft } from "@/components/fuel/QuickFuelForm";
+import { FuelLogFilters } from "@/components/fuel/FuelLogFilters";
 import {
-  FuelLogFilters,
   countActiveFuelLogFilters,
   type FuelLogFilterOptions,
   type FuelLogFilterValues,
-} from "@/components/fuel/FuelLogFilters";
+} from "@/lib/fuel-log-filters";
 import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
