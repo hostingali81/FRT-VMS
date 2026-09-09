@@ -113,6 +113,38 @@ export function extractRtoDocuments(detail: Cars24Detail | null): RtoDocuments {
   return docs;
 }
 
+/**
+ * A Cars24 call that failed for a reason the caller must surface. `retryable`
+ * separates transient faults (5xx, timeouts) from a hard block or bad request,
+ * where an immediate retry only doubles the load on an already-refusing origin.
+ */
+class Cars24Error extends Error {
+  readonly retryable: boolean;
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.name = "Cars24Error";
+    this.retryable = retryable;
+  }
+}
+
+/** Short, human error text for the /alerts banner. */
+function describeError(status: number, body: string): Cars24Error {
+  if (status === 401 || status === 403) {
+    return new Cars24Error(`blocked by Cars24 (HTTP ${status})`, false);
+  }
+  if (status === 429) return new Cars24Error("rate limited by Cars24 (HTTP 429)", false);
+  if (status >= 500) return new Cars24Error(`Cars24 server error (HTTP ${status})`, true);
+
+  let message = "";
+  try {
+    const json = JSON.parse(body) as { message?: unknown; error?: unknown };
+    message = String(json?.message ?? json?.error ?? "");
+  } catch {
+    // HTML or empty body (a Cloudflare interstitial) — the status is the message.
+  }
+  return new Cars24Error(message ? `${message} (HTTP ${status})` : `Cars24 error (HTTP ${status})`, false);
+}
+
 async function fetchCars24Once(url: string): Promise<Cars24Detail | null> {
   const res = await fetch(url, {
     headers: HEADERS,
@@ -120,29 +152,35 @@ async function fetchCars24Once(url: string): Promise<Cars24Detail | null> {
     cache: "no-store",
   });
   const text = await res.text();
-  // Cloudflare 5xx pages are JSON too, so status must be checked first — they
-  // would otherwise parse fine, yield no detail, and miscount as "no record".
-  if (res.status >= 500) throw new Error(`Cars24 server error (HTTP ${res.status})`);
+
+  // 404 (`{"code":"C2BVASORDERSH402","message":"Entity not found"}`) is the only
+  // status that means "Cars24 has no record for this registration"; the caller
+  // counts it as noData. Every other non-2xx must throw: Cloudflare blocks and
+  // rate limits return JSON too, so returning null would quietly report a fully
+  // broken run as "no RTO record" for the entire fleet.
+  if (res.status === 404) return null;
+  if (!res.ok) throw describeError(res.status, text);
+
   let json: { vehicleResponseDto?: { detail?: Cars24Detail | null } };
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`non-JSON response (HTTP ${res.status})`);
+    throw new Cars24Error(`non-JSON response (HTTP ${res.status})`, false);
   }
-  // 404 = Cars24 has no record for this registration; the caller counts it as noData.
   return json?.vehicleResponseDto?.detail ?? null;
 }
 
 /**
- * Fetch the Cars24 detail object for a registration number. Retries once on
- * failure (their origin intermittently 504s), then throws so the caller can
- * count it as a failure and move on.
+ * Fetch the Cars24 detail object for a registration number. Retries once on a
+ * transient failure (their origin intermittently 504s), then throws so the
+ * caller can count it as a failure and move on.
  */
 export async function fetchCars24Detail(reg: string): Promise<Cars24Detail | null> {
   const url = API(normalizeRegistration(reg));
   try {
     return await fetchCars24Once(url);
-  } catch {
+  } catch (e) {
+    if (e instanceof Cars24Error && !e.retryable) throw e;
     await new Promise((resolve) => setTimeout(resolve, 500));
     return fetchCars24Once(url);
   }

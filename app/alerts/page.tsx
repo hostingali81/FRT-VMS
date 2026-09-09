@@ -9,7 +9,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requireProfile } from "@/lib/auth";
-import { refreshRtoDocumentsAction } from "@/lib/actions/vahan-actions";
+import { refreshRtoDocumentsAction } from "@/lib/actions/cars24-actions";
 import { getAlertsData, preloadDriverData, preloadFleetData } from "@/lib/data";
 import { daysUntil, getWorstDocumentState } from "@/lib/utils/expiry";
 import { cn } from "@/lib/utils/cn";
@@ -86,8 +86,11 @@ export default async function AlertsPage({
   return (
     <AppShell profile={profile}>
       {/* "Refresh from RTO" pulls insurance / fitness / pollution expiry dates
-          from vahandetails.com's RC API (x-api-key auth, works server-side).
-          Owner name and all other RC details are left untouched. */}
+          from Cars24's public service-history API. Only those three dates are
+          written; owner name and all other RC details are left untouched.
+          Cloudflare may block Cars24 from datacenter IPs (Vercel) — the banner
+          then reports the failure, and `npm run rto:refresh` is the local
+          fallback. */}
       <PageHeader title="Alerts" eyebrow="Expiry and staffing monitor">
         {canRefreshRto && (
           <form action={refreshRtoDocumentsAction}>
