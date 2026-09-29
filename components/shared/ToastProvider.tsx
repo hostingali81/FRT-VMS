@@ -47,6 +47,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   "division-create": "Could not create the division",
   "substation-required": "Substation name and division are required",
   "substation-create": "Could not create the substation",
+  "substation-update": "Could not update the substation",
+  "division-access": "The user was saved, but their extra division access could not be stored",
   "name-required": "Name is required",
   "name-update": "Could not update your name",
   "password-required": "Enter your current and new password",
@@ -79,7 +81,9 @@ export function ToastProvider() {
     if (searchParams.get("zone") === "created") toast.success("Zone created successfully");
     if (searchParams.get("circle") === "created") toast.success("Circle created successfully");
     if (searchParams.get("division") === "created") toast.success("Division created successfully");
-    if (searchParams.get("substation") === "created") toast.success("Substation created successfully");
+    const substation = searchParams.get("substation");
+    if (substation === "created") toast.success("Substation created successfully");
+    if (substation === "updated") toast.success("Substation updated successfully");
   }, [searchParams]);
 
   return <Toaster position="top-right" richColors />;

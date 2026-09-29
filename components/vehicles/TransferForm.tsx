@@ -43,7 +43,13 @@ export function TransferForm({
   cancelHref?: string;
 }) {
   const [moveDriver, setMoveDriver] = useState(false);
-  const [circleId, setCircleId] = useState(vehicle.current_circle_id ?? lookups.circles[0]?.id ?? "");
+  // The circle list is scoped to the user, so a vehicle parked outside it would
+  // preselect an id that isn't an option — the dropdown would come up blank and
+  // submit an empty circle. Fall back to the first circle they actually have.
+  const homeCircleId = vehicle.current_circle_id ?? vehicle.home_circle_id;
+  const [circleId, setCircleId] = useState(
+    lookups.circles.some((circle) => circle.id === homeCircleId) ? homeCircleId : lookups.circles[0]?.id ?? "",
+  );
   const [divisionId, setDivisionId] = useState(vehicle.division_id ?? "");
 
   const divisions = useMemo(
@@ -115,6 +121,10 @@ export function TransferForm({
               name="to_circle_id"
               value={circleId}
               onChange={(event) => {
+                // Only clear the division when the circle really changed. Re-picking
+                // the same circle (the only one a circle/division user is offered)
+                // used to wipe the division and substation they had just chosen.
+                if (event.target.value === circleId) return;
                 setCircleId(event.target.value);
                 setDivisionId("");
               }}

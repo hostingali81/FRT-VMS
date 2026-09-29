@@ -63,10 +63,13 @@ export const vehicleUpdateSchema = vehicleSchema
   .partial();
 
 export const transferSchema = z.object({
-  vehicle_id: z.string().uuid(),
-  to_circle_id: z.string().uuid(),
-  to_division_id: z.string().uuid(),
-  to_substation_id: z.string().uuid(),
+  vehicle_id: z.string().uuid("Vehicle is missing"),
+  // Named messages, not Zod's default "Invalid input": an unpicked dropdown
+  // arrives as "" (or missing, when the field is disabled) and the user needs to
+  // be told which one they left blank.
+  to_circle_id: z.string().uuid("Select the circle to move this vehicle to"),
+  to_division_id: z.string().uuid("Select the division to move this vehicle to"),
+  to_substation_id: z.string().uuid("Select the substation to move this vehicle to"),
   transfer_date: z.string().min(1, "Date is required"),
   reason: z.string().min(1, "Reason is required"),
   approved_by: z.string().min(1, "Approver name is required"),

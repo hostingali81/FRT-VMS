@@ -157,14 +157,19 @@ export async function transferVehicleAction(formData: FormData) {
   }
 
   const data = validated.data;
+  // Permission failures come back to the form as a readable message rather than
+  // a thrown 500 — the user needs to know the move was refused and why.
+  const refuse: (message: string) => never = (message) =>
+    redirect(`/vehicles/${data.vehicle_id}/transfer?error=${encodeURIComponent(message)}`);
+
   const vehicle = await getVehicle(data.vehicle_id, profile);
-  if (!vehicle) throw new Error("Vehicle not found or unauthorized");
+  if (!vehicle) refuse("Vehicle not found, or you don't have access to it");
 
   if (!canTransferVehicle(profile, vehicle, data.to_circle_id, lookups)) {
-    throw new Error("Unauthorized: Transfer not allowed");
+    refuse("You can't move this vehicle. Cross-circle transfers need an Admin or HQ.");
   }
   if (!canAccessLocation(profile, { circleId: data.to_circle_id, divisionId: data.to_division_id }, lookups)) {
-    throw new Error("Unauthorized: No access to destination");
+    refuse("You don't have access to the destination division");
   }
 
   const supabase = requireAdminClient();
@@ -180,7 +185,7 @@ export async function transferVehicleAction(formData: FormData) {
     p_move_driver: data.move_driver,
   });
 
-  if (error) throw new Error("Transfer failed: " + error.message);
+  if (error) refuse("Transfer failed: " + error.message);
 
   revalidatePath("/vehicles");
   revalidatePath(`/vehicles/${data.vehicle_id}`);

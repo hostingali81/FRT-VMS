@@ -65,8 +65,8 @@ type Coords = { top: number; left: number; width: number; maxHeight: number; up:
  *
  * The popup is rendered through a portal with fixed positioning so it is never
  * clipped by `overflow` containers (tables, horizontally scrollable filter
- * bars, cards). The chosen value is mirrored into a hidden input so Server
- * Action FormData submission is preserved.
+ * bars, cards). The chosen value is mirrored into a transparent native
+ * <select> so Server Action FormData submission and `required` both work.
  */
 export function Select({
   name,
@@ -202,7 +202,32 @@ export function Select({
 
   return (
     <div className={cn("relative", className)}>
-      {name ? <input type="hidden" name={name} value={effective} disabled={disabled} /> : null}
+      {/* The value is mirrored into a real <select> rather than a hidden input so
+          `required` is actually enforced. A hidden input is barred from constraint
+          validation, so a required field left empty used to submit anyway and the
+          Server Action bounced it back with an error the page never displayed —
+          the form simply appeared to do nothing. `display:none` would break it the
+          same way (the browser refuses to report an unfocusable control), so the
+          mirror stays laid out over the trigger, transparent and click-through. */}
+      {name ? (
+        <select
+          name={name}
+          value={effective}
+          onChange={() => {}}
+          required={required}
+          disabled={disabled}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+        >
+          {options.some((option) => option.value === effective) ? null : <option value={effective} />}
+          {options.map((option, index) => (
+            <option key={`${option.value}-${index}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
 
       <button
         ref={triggerRef}
