@@ -165,8 +165,15 @@ export async function transferVehicleAction(formData: FormData) {
   const vehicle = await getVehicle(data.vehicle_id, profile);
   if (!vehicle) refuse("Vehicle not found, or you don't have access to it");
 
+  // Name the real reason: blaming cross-circle approval for a refusal inside one
+  // circle sends the user looking for an approver they may already be.
+  const fromCircleId = vehicle.current_circle_id ?? vehicle.home_circle_id;
   if (!canTransferVehicle(profile, vehicle, data.to_circle_id, lookups)) {
-    refuse("You can't move this vehicle. Cross-circle transfers need an Admin or HQ.");
+    refuse(
+      fromCircleId && fromCircleId !== data.to_circle_id
+        ? "Moving a vehicle to another circle needs an Admin or HQ"
+        : "You don't have permission to move this vehicle",
+    );
   }
   if (!canAccessLocation(profile, { circleId: data.to_circle_id, divisionId: data.to_division_id }, lookups)) {
     refuse("You don't have access to the destination division");

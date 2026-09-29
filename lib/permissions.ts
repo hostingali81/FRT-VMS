@@ -102,8 +102,13 @@ export function canTransferVehicle(profile: UserProfile, vehicle: FleetVehicle, 
     return profile.role === "zonal_manager" && canSeeCircle(profile, fromCircleId, lookups) && canSeeCircle(profile, toCircleId, lookups);
   }
 
-  // Circle incharge can only move vehicles within their own circle.
-  if (profile.role === "circle_incharge") return canSeeCircle(profile, fromCircleId, lookups);
+  // Admin (zonal_manager) and circle incharge both move vehicles inside a circle
+  // they can see. Admin was missing here since the first commit, so it could move a
+  // vehicle ACROSS circles but not within one — and with a single-circle fleet that
+  // meant it could not transfer anything at all.
+  if (profile.role === "zonal_manager" || profile.role === "circle_incharge") {
+    return canSeeCircle(profile, fromCircleId, lookups);
+  }
 
   // Division incharge can relocate vehicles within their own division (e.g. between
   // substations). They can't move across divisions or circles: cross-circle is already
