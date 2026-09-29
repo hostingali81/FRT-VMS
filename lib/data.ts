@@ -685,20 +685,31 @@ export async function getAdminUsers(): Promise<AdminUserRow[]> {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return [];
 
-  const [{ data: profiles }, usersResult] = await Promise.all([
+  const [{ data: profiles }, usersResult, grants] = await Promise.all([
     supabase
       .from("user_profiles")
       .select("id,name,role,circle_id,division_id,zone_id,is_active,created_at,updated_at")
       .order("created_at", { ascending: false }),
     supabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    supabase.from("user_division_access").select("user_id,division_id"),
   ]);
 
   const users = usersResult.data?.users ?? [];
+
+  // Extra division grants, keyed by user, so the admin form can tick the boxes
+  // it already holds. Absent table (migration 023 not pushed) → nobody has any.
+  const grantsByUser = new Map<string, string[]>();
+  for (const row of grants.data ?? []) {
+    const list = grantsByUser.get(row.user_id as string) ?? [];
+    list.push(row.division_id as string);
+    grantsByUser.set(row.user_id as string, list);
+  }
 
   return ((profiles ?? []) as UserProfile[]).map((profile) => {
     const authUser = users.find((user) => user.id === profile.id);
     return {
       ...profile,
+      extra_division_ids: grantsByUser.get(profile.id) ?? [],
       email: authUser?.email ?? null,
       last_sign_in_at: authUser?.last_sign_in_at ?? null,
     };

@@ -76,6 +76,10 @@ export type UserProfile = {
   division_id: string | null;
   zone_id: string | null;
   is_active: boolean;
+  // Divisions this user was granted on top of their own scope (user_division_access).
+  // This is how a division user gets the QRT van: see [[accessibleDivisionIds]].
+  // Optional so a profile read from mock data (no Supabase) still type-checks.
+  extra_division_ids?: string[];
   created_at?: string | null;
   updated_at?: string | null;
 };

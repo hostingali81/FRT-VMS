@@ -51,6 +51,8 @@ Role hierarchy: `super_admin > zonal_manager > circle_incharge > division_inchar
 
 Permission checks are purely in application code (no Supabase RLS filtering). Every Server Action calls `requireProfile()` then checks permissions before touching the database. The key permission functions are `canSeeVehicle`, `canEditVehicle`, `canTransferVehicle`, `canAccessLocation`.
 
+On top of the role's own scope, a user can hold **extra division grants** (`user_division_access`). `getCurrentProfile()` loads them onto the profile as `extra_division_ids`, and `accessibleDivisionIds()` unions them in — so the checks stay synchronous. This is what lets the super admin give a division user the QRT division (Admin → user → Extra Division Access): QRT is a division holding one van, so without a grant nobody below circle level can see it or log its fuel.
+
 ### Supabase schema patterns
 
 - `vehicles` table + `vehicle_assignments` (1:1, current location) + append-only history tables
@@ -68,7 +70,9 @@ When adding a new tracked field that needs history, follow the `vehicle_status_h
 
 All interactive forms are `"use client"` components that receive a Server Action as an `action` prop. Submit buttons use `<SubmitButton>` from `components/ui/submit-button.tsx` (not the plain `<Button>`) — this component uses `useFormStatus()` to auto-disable and show a spinner during submission. Use `<SubmitButton>` for all `type="submit"` buttons inside `<form action={serverAction}>`.
 
-Validation: Server Actions parse `FormData` with a Zod schema (from `lib/validations.ts`). On failure they `redirect()` back with `?error=` in the query string. On success they `redirect()` forward.
+Validation: Server Actions parse `FormData` with a Zod schema (from `lib/validations.ts`). On failure they `redirect()` back with `?error=` in the query string. On success they `redirect()` forward. Those query params are surfaced by the global `ToastProvider` in `app/layout.tsx` — pages do not render their own banners for them, so a new result code needs a message added there, and a Zod message must read like something a user can act on ("Select the substation…", not Zod's default "Invalid input").
+
+`Select` (`components/ui/searchable-select.tsx`) is a custom combobox, not a native `<select>`. It mirrors its value into a transparent, click-through native `<select>` laid over the trigger — a hidden input is barred from constraint validation, so `required` would do nothing and incomplete forms would post and bounce back silently. Keep the mirror focusable: `display:none`/zero-size makes Chrome refuse to report the control and the form fails to submit with no message at all.
 
 ### Types
 

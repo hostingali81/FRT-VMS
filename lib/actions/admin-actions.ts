@@ -20,6 +20,40 @@ function requireAdminClient() {
   return supabase;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Extra divisions this user should reach on top of their own scope — the QRT van
+ * being the reason it exists (see migration 023). Only the location-scoped roles
+ * can hold grants: super_admin and zonal_manager already see everything, so a
+ * grant there would be dead data that outlives a later demotion.
+ */
+function extraDivisionIds(role: UserRole, formData: FormData) {
+  if (role === "super_admin" || role === "zonal_manager") return [];
+  const picked = formData
+    .getAll("extra_division_ids")
+    .filter((value): value is string => typeof value === "string" && UUID.test(value));
+  // A user's own division is never also a grant — it would just be a duplicate
+  // row that stays behind when they are moved to another division.
+  const own = textValue(formData, "division_id");
+  return Array.from(new Set(picked)).filter((id) => id !== own);
+}
+
+/** Replace a user's grants with exactly what the form submitted. */
+async function saveDivisionGrants(
+  supabase: ReturnType<typeof requireAdminClient>,
+  userId: string,
+  divisionIds: string[],
+) {
+  const { error: clearError } = await supabase.from("user_division_access").delete().eq("user_id", userId);
+  if (clearError) return clearError;
+  if (divisionIds.length === 0) return null;
+  const { error } = await supabase
+    .from("user_division_access")
+    .insert(divisionIds.map((division_id) => ({ user_id: userId, division_id })));
+  return error;
+}
+
 // Keep only the location scope that matches the role, and require the field the
 // role actually needs. Parent ids (circle/zone) come in as hidden inputs derived
 // on the client, so a division user still has a populated circle/zone.
@@ -87,6 +121,9 @@ export async function createUserAction(formData: FormData) {
 
   if (profileError) redirect("/admin?error=profile-create");
 
+  const grantError = await saveDivisionGrants(supabase, data.user.id, extraDivisionIds(role, formData));
+  if (grantError) redirect("/admin?error=division-access");
+
   revalidatePath("/admin");
   redirect("/admin?user=created");
 }
@@ -113,6 +150,9 @@ export async function updateUserProfileAction(formData: FormData) {
     .eq("id", userId);
 
   if (error) redirect("/admin?error=user-update");
+
+  const grantError = await saveDivisionGrants(supabase, userId, extraDivisionIds(role, formData));
+  if (grantError) redirect("/admin?error=division-access");
 
   revalidatePath("/admin");
   redirect("/admin?user=updated");

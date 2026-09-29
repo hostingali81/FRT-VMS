@@ -24,12 +24,19 @@ export function accessibleCircleIds(profile: UserProfile, lookups: LookupData) {
 }
 
 export function accessibleDivisionIds(profile: UserProfile, lookups: LookupData) {
+  // Divisions the super admin granted on top of the role's own scope. A division
+  // user only ever sees their own division, which leaves the QRT van — parked in
+  // a division of its own — invisible to everyone below circle level; this is
+  // what lets the super admin nominate who looks after it.
+  const granted = profile.extra_division_ids ?? [];
+
   if (profile.role === "division_incharge" || (profile.role === "viewer" && profile.division_id)) {
-    return new Set(profile.division_id ? [profile.division_id] : []);
+    return new Set([...(profile.division_id ? [profile.division_id] : []), ...granted]);
   }
 
   const circleIds = accessibleCircleIds(profile, lookups);
-  return new Set(lookups.divisions.filter((division) => circleIds.has(division.circle_id)).map((division) => division.id));
+  const own = lookups.divisions.filter((division) => circleIds.has(division.circle_id)).map((division) => division.id);
+  return new Set([...own, ...granted]);
 }
 
 export function filterLookupsForProfile(lookups: LookupData, profile: UserProfile): LookupData {

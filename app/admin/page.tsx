@@ -124,6 +124,7 @@ function UserEditor({ user, lookups }: { user: AdminUserRow; lookups: LookupData
           defaultZoneId={user.zone_id ?? ""}
           defaultCircleId={user.circle_id ?? ""}
           defaultDivisionId={user.division_id ?? ""}
+          defaultExtraDivisionIds={user.extra_division_ids ?? []}
         />
         <Field label="Active">
           <Select name="is_active" defaultValue={String(user.is_active)}>
@@ -272,14 +273,21 @@ function SubstationManager({ lookups }: { lookups: LookupData }) {
 }
 
 function userScope(user: AdminUserRow, lookups: LookupData) {
+  // Extra divisions are appended so the collapsed row answers "who holds QRT?"
+  // without opening every user.
+  const extra = (user.extra_division_ids ?? [])
+    .map((id) => lookups.divisions.find((item) => item.id === id)?.name)
+    .filter(Boolean);
+  const withExtra = (base: string) => (extra.length > 0 ? `${base} + ${extra.join(", ")}` : base);
+
   const division = lookups.divisions.find((item) => item.id === user.division_id);
-  if (division) return division.name;
+  if (division) return withExtra(division.name);
 
   const circle = lookups.circles.find((item) => item.id === user.circle_id);
-  if (circle) return circle.name;
+  if (circle) return withExtra(circle.name);
 
   const zone = lookups.zones?.find((item) => item.id === user.zone_id);
-  if (zone) return zone.name;
+  if (zone) return withExtra(zone.name);
 
   return "All access";
 }

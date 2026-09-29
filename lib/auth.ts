@@ -21,14 +21,23 @@ export const getCurrentProfile = cache(async (): Promise<UserProfile | null> => 
   const supabase = createSupabaseAdminClient();
   if (!supabase) return null;
 
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .select("id,name,role,circle_id,division_id,zone_id,is_active,created_at,updated_at")
-    .eq("id", user.id)
-    .maybeSingle();
+  // The extra-division grants are read alongside the profile so every permission
+  // check downstream stays synchronous. A failure here (e.g. migration 023 not
+  // pushed yet) must not lock anyone out — it just means no extra divisions.
+  const [{ data, error }, grants] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("id,name,role,circle_id,division_id,zone_id,is_active,created_at,updated_at")
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase.from("user_division_access").select("division_id").eq("user_id", user.id),
+  ]);
 
   if (error || !data || !data.is_active) return null;
-  return data as UserProfile;
+  return {
+    ...(data as UserProfile),
+    extra_division_ids: (grants.data ?? []).map((row) => row.division_id as string),
+  };
 });
 
 export async function requireProfile(): Promise<UserProfile> {

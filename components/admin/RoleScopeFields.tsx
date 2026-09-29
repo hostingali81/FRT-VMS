@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Label, Select } from "@/components/ui/form";
+import { cn } from "@/lib/utils/cn";
 import { ROLE_LABELS, USER_ROLES } from "@/lib/types";
 import type { LookupData, UserRole } from "@/lib/types";
 
@@ -19,6 +20,11 @@ type ViewerScope = "zone" | "circle" | "division";
  * For a division user the parent circle/zone are submitted too so lookups in
  * the rest of the app resolve correctly. A viewer is scoped to exactly one
  * level, so only that id is submitted.
+ *
+ * On top of that one scope, every location-scoped role can be granted extra
+ * divisions. That is how the QRT van — parked in a division of its own, so
+ * invisible to every division user — gets an owner: tick QRT for whoever fuels
+ * and runs it.
  */
 export function RoleScopeFields({
   lookups,
@@ -26,12 +32,14 @@ export function RoleScopeFields({
   defaultZoneId = "",
   defaultCircleId = "",
   defaultDivisionId = "",
+  defaultExtraDivisionIds = [],
 }: {
   lookups: LookupData;
   defaultRole?: UserRole;
   defaultZoneId?: string;
   defaultCircleId?: string;
   defaultDivisionId?: string;
+  defaultExtraDivisionIds?: string[];
 }) {
   const circleOfDefaultDivision = lookups.divisions.find((d) => d.id === defaultDivisionId)?.circle_id ?? "";
 
@@ -43,8 +51,19 @@ export function RoleScopeFields({
     defaultDivisionId ? "division" : defaultZoneId ? "zone" : "circle",
   );
 
+  const [extraDivisionIds, setExtraDivisionIds] = useState<string[]>(defaultExtraDivisionIds);
+
   const divisionsForCircle = lookups.divisions.filter((d) => d.circle_id === circleId);
   const derivedZoneId = lookups.circles.find((c) => c.id === circleId)?.zone_id ?? "";
+
+  // Grants only make sense for a role that has a location scope to extend.
+  const canGrantDivisions = role === "circle_incharge" || role === "division_incharge" || role === "viewer";
+
+  function toggleExtraDivision(id: string) {
+    setExtraDivisionIds((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+  }
 
   function pickCircle(value: string) {
     setCircleId(value);
@@ -136,7 +155,81 @@ export function RoleScopeFields({
           ) : null}
         </>
       ) : null}
+
+      {canGrantDivisions ? (
+        <ExtraDivisionAccess
+          lookups={lookups}
+          ownDivisionId={role === "circle_incharge" ? "" : divisionId}
+          selected={extraDivisionIds}
+          onToggle={toggleExtraDivision}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * Extra divisions on top of the user's own scope. Submitted as repeated
+ * `extra_division_ids` fields, which the action reads with `getAll`.
+ *
+ * Checkboxes rather than a multi-select: the list is short, and the whole point
+ * is that the super admin can see at a glance who currently holds QRT.
+ */
+function ExtraDivisionAccess({
+  lookups,
+  ownDivisionId,
+  selected,
+  onToggle,
+}: {
+  lookups: LookupData;
+  ownDivisionId: string;
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  const showCircle = lookups.circles.length > 1;
+  const options = lookups.divisions.filter((division) => division.id !== ownDivisionId);
+
+  return (
+    <div className="space-y-2 md:col-span-2 xl:col-span-4">
+      <Label>Extra Division Access</Label>
+      <p className="text-xs text-slate-500">
+        Divisions this user can also see and manage, on top of their own scope. Tick QRT to put someone in charge of
+        the QRT van — they can then log its fuel like any vehicle of their own division.
+      </p>
+      {options.length === 0 ? (
+        <p className="text-sm italic text-slate-400">No other divisions to grant.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white p-3">
+          {options.map((division) => {
+            const checked = selected.includes(division.id);
+            return (
+              <label
+                key={division.id}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm",
+                  checked ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-700",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  name="extra_division_ids"
+                  value={division.id}
+                  checked={checked}
+                  onChange={() => onToggle(division.id)}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                />
+                {division.name}
+                {showCircle ? (
+                  <span className={checked ? "text-slate-300" : "text-slate-400"}>
+                    {lookups.circles.find((circle) => circle.id === division.circle_id)?.name ?? ""}
+                  </span>
+                ) : null}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
