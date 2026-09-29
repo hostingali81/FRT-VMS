@@ -38,3 +38,5 @@ next-env.d.ts
 # scratch / temp files
 tmp-*
 *.tmp.xlsx
+/.tmpwork/
+/.tmpsmoke/
